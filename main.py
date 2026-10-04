@@ -153,10 +153,16 @@ def scrape_news_mentions(bank_name: str) -> int:
 # 3. CHUẨN HÓA MIN-MAX & TÍNH ĐIỂM RANKING
 # ==========================================
 
-def min_max_scale(series: pd.Series) -> pd.Series:
+def min_max_scale(series: pd.Series, min_score=20.0, max_score=100.0) -> pd.Series:
+    """
+    Chuẩn hóa dữ liệu đưa về thang điểm từ min_score (mặc định 20) đến max_score (100).
+    Giúp ngân hàng thấp nhất nhóm vẫn có điểm sàn (20 điểm) thay vì dính điểm 0.
+    """
     if series.max() == series.min():
-        return pd.Series(100.0, index=series.index)
-    return ((series - series.min()) / (series.max() - series.min())) * 100.0
+        return pd.Series(max_score, index=series.index)
+    
+    scaled = ((series - series.min()) / (series.max() - series.min())) * (max_score - min_score) + min_score
+    return scaled
 
 
 def calculate_dti_ranking(df: pd.DataFrame) -> pd.DataFrame:

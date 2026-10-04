@@ -109,11 +109,13 @@ st.markdown(f"""
     .dti-table th {{
         background: {DEEP}; color: #FFFFFF !important; padding: 13px 14px;
         text-align: left; font-weight: 600; font-size: 0.86rem;
+        border-right: 1px solid rgba(255,255,255,0.35);
     }}
     .dti-table td {{
-        padding: 12px 14px; border-bottom: 1px solid #EFE7FF;
+        padding: 12px 14px; border-bottom: 1px solid #D9CCF5; border-right: 1px solid #E4D9FB;
         color: {TEXT}; font-size: 0.92rem; vertical-align: middle;
     }}
+    .dti-table th:last-child, .dti-table td:last-child {{ border-right: none; }}
     .dti-table tr:nth-child(even) td {{ background: #FAF7FF; }}
     .dti-table tr:last-child td {{ border-bottom: none; }}
     .dti-table td.rank {{ font-weight: 700; color: {DEEP}; width: 60px; }}
@@ -122,6 +124,13 @@ st.markdown(f"""
     .bar-track {{ flex: 1; height: 10px; background: #EFE7FF; border-radius: 999px; overflow: hidden; }}
     .bar-fill {{ height: 100%; background: linear-gradient(90deg, #B79CFA, {DEEP}); border-radius: 999px; }}
     .bar-val {{ min-width: 48px; text-align: right; font-weight: 600; font-size: 0.85rem; }}
+    div[data-testid="stMetricDelta"] {{
+        background: #EFE7FF !important; border-radius: 999px; padding: 2px 10px;
+    }}
+    div[data-testid="stMetricDelta"],
+    div[data-testid="stMetricDelta"] * {{
+        color: {DEEP} !important; fill: {DEEP} !important; font-weight: 600;
+    }}
     hr {{ border-color: {BORDER}; }}
 </style>
 """, unsafe_allow_html=True)
@@ -147,16 +156,22 @@ def hex_to_rgba(hex_color, alpha):
     return f"rgba({r},{g},{b},{alpha})"
 
 
-def style_fig(fig, title, height=430):
+def style_fig(fig, title, height=430, cartesian=True):
     fig.update_layout(
-        title=dict(text=f"<b>{title}</b>", font=dict(size=15, color=TEXT), x=0.02),
+        title=dict(text=f"<b>{title}</b>", font=dict(size=15, color=DEEP), x=0.02),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#FBF9FF",
-        font=dict(color=TEXT, size=12),
+        font=dict(color=DEEP, size=12),
         height=height,
         margin=dict(l=20, r=20, t=70, b=30),
-        legend=dict(bgcolor="rgba(255,255,255,0.8)", bordercolor=BORDER, borderwidth=1),
+        legend=dict(bgcolor="rgba(255,255,255,0.8)", bordercolor=BORDER, borderwidth=1,
+                    font=dict(color=DEEP), title=dict(font=dict(color=DEEP))),
+        hoverlabel=dict(bgcolor="#FFFFFF", bordercolor=BORDER, font=dict(color=DEEP)),
+        modebar=dict(color=DEEP, activecolor="#5B3FB5", bgcolor="rgba(0,0,0,0)"),
     )
+    if cartesian:
+        fig.update_xaxes(tickfont=dict(color=DEEP), title_font=dict(color=DEEP), linecolor=BORDER)
+        fig.update_yaxes(tickfont=dict(color=DEEP), title_font=dict(color=DEEP), linecolor=BORDER)
     return fig
 
 
@@ -187,13 +202,12 @@ pillar_names = ["P1: Quy mô App", "P2: Trải nghiệm CX", "P3: Hạ tầng & 
 # ==========================================
 # 5. METRICS TỔNG QUAN
 # ==========================================
-top_1, top_2, top_3 = df.iloc[0], df.iloc[1], df.iloc[2]
+top_1 = df.iloc[0]
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("TOP 1 DTI", f"{top_1['Bank']}", f"{top_1['DTI_Total_Score']:.2f} điểm", delta_color="off")
-c2.metric("TOP 2 DTI", f"{top_2['Bank']}", f"{top_2['DTI_Total_Score']:.2f} điểm", delta_color="off")
-c3.metric("TOP 3 DTI", f"{top_3['Bank']}", f"{top_3['DTI_Total_Score']:.2f} điểm", delta_color="off")
-c4.metric("Tổng số ngân hàng", f"{len(df)} ngân hàng")
+top_df = df.head(6)
+metric_cols = st.columns(len(top_df))
+for mc, (_, r) in zip(metric_cols, top_df.iterrows()):
+    mc.metric(f"TOP {int(r['Rank'])} DTI", f"{r['Bank']}", f"{r['DTI_Total_Score']:.2f} điểm", delta_color="off")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -201,7 +215,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 # 6. BẢNG XẾP HẠNG
 # ==========================================
 section("Bảng xếp hạng tổng hợp DTI",
-        "Điểm tổng DTI là trung bình cộng của 4 trụ cột (mỗi trụ cột chiếm 25%), thang điểm 100.")
+        f"Đánh giá {len(df)} ngân hàng. Điểm tổng DTI là trung bình cộng của 4 trụ cột (mỗi trụ cột chiếm 25%), thang điểm 100.")
 
 df_display = df.rename(columns={
     "Rank": "Hạng",
@@ -252,7 +266,8 @@ with col_a:
         color_discrete_sequence=BANK_COLORS,
         labels={"Bank": "Ngân hàng", "DTI_Total_Score": "Điểm DTI tổng hợp (0–100)"},
     )
-    fig_bar.update_traces(textposition="outside", marker_line_color="#FFFFFF", marker_line_width=2)
+    fig_bar.update_traces(textposition="outside", marker_line_color="#FFFFFF", marker_line_width=2,
+                          textfont=dict(color=DEEP))
     fig_bar.update_layout(showlegend=False, yaxis_range=[0, 105])
     fig_bar.update_xaxes(showgrid=False)
     fig_bar.update_yaxes(gridcolor="#EDE6FB")
@@ -284,12 +299,12 @@ with col_b:
         polar=dict(
             bgcolor="#FBF9FF",
             radialaxis=dict(visible=True, range=[0, 100], gridcolor="#E4D9FB", linecolor="#E4D9FB",
-                            tickfont=dict(color=SUBTEXT)),
-            angularaxis=dict(gridcolor="#E4D9FB", linecolor="#E4D9FB"),
+                            tickfont=dict(color=DEEP)),
+            angularaxis=dict(gridcolor="#E4D9FB", linecolor="#E4D9FB", tickfont=dict(color=DEEP)),
         ),
         showlegend=True,
     )
-    style_fig(fig_radar, "Biểu đồ mạng nhện: So sánh năng lực theo 4 trụ cột DTI")
+    style_fig(fig_radar, "Biểu đồ mạng nhện: So sánh năng lực theo 4 trụ cột DTI", cartesian=False)
     st.plotly_chart(fig_radar, use_container_width=True)
     note("<b>Biểu đồ này cho biết:</b> hình dạng năng lực của từng ngân hàng, mạnh ở đâu, yếu ở đâu.<br>"
          "<b>Cách đọc:</b> mỗi đỉnh là một trụ cột, càng xa tâm điểm càng cao (tối đa 100). "
@@ -333,7 +348,7 @@ with col_d:
         fig_stack.add_trace(go.Bar(
             y=df_stack["Bank"], x=df_stack[col] * 0.25, name=name, orientation="h",
             marker=dict(color=PILLAR_COLORS[i], line=dict(color="#FFFFFF", width=1.5)),
-            text=[f"{v * 0.25:.1f}" for v in df_stack[col]], textposition="inside",
+            text=[f"{v * 0.25:.1f}" for v in df_stack[col]], textposition="inside", textfont=dict(color=DEEP),
             hovertemplate="%{y}<br>" + name + ": %{x:.2f} điểm<extra></extra>",
         ))
     fig_stack.update_layout(barmode="stack", yaxis=dict(autorange="reversed"))
