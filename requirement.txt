@@ -1,0 +1,7 @@
+#BƯỚC 1: Chuẩn bị môi trường & Thư mục làm việc
+# Cài thư viện: pip install google-play-scraper requests beautifulsoup4 pandas numpy pypdf
+#pip install google-play-scraper requests beautifulsoup4 pandas pypdf lxml\
+#pip install streamlit plotly
+#chạy lệnh python main.py
+#python -m streamlit run app.py
+
