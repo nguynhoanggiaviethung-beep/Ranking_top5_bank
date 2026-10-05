@@ -1,0 +1,20 @@
+﻿Code,Pillar,Criterion,Type
+C1,Khách hàng,Mức độ bao phủ kênh/dịch vụ số,qualitative
+C2,Khách hàng,Mức độ khách hàng sử dụng kênh số,quantitative
+C3,Khách hàng,Chất lượng trải nghiệm số,quantitative_proxy
+S1,Chiến lược,Chiến lược và lộ trình chuyển đổi số,qualitative
+S2,Chiến lược,Đầu tư/ngân sách cho chuyển đổi số,qualitative
+S3,Chiến lược,Hệ sinh thái và quan hệ đối tác số,qualitative
+T1,Công nghệ,eKYC và sinh trắc học,qualitative
+T2,Công nghệ,Cho vay số/digital lending,qualitative
+T3,Công nghệ,AI/GenAI,qualitative
+T4,Công nghệ,Open Banking/API,qualitative
+O1,Vận hành,Tỷ trọng giao dịch trên kênh số,quantitative
+O2,Vận hành,Số hóa/tự động hóa quy trình,qualitative
+O3,Vận hành,Vận hành dịch vụ số,qualitative
+H1,Văn hóa,Đào tạo và năng lực số,qualitative
+H2,Văn hóa,Đổi mới sáng tạo,qualitative
+H3,Văn hóa,Quản trị thay đổi và văn hóa số,qualitative
+D1,Dữ liệu,Kiến trúc và tích hợp dữ liệu,qualitative
+D2,Dữ liệu,Quản trị và an toàn dữ liệu,qualitative
+D3,Dữ liệu,Phân tích dữ liệu và cá nhân hóa,qualitative

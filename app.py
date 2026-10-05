@@ -12,15 +12,15 @@ st.set_page_config(
     layout="wide"
 )
 
-# Bảng màu pastel tím
-TEXT = "#4A3F6B"        # chữ tím xám dịu
+# Bảng màu pastel tím — GIỮ NGUYÊN GIAO DIỆN
+TEXT = "#4A3F6B"
 SUBTEXT = "#7C6FA0"
-DEEP = "#7C5CD6"        # tím đậm cho tiêu đề bảng / expander
-BG = "#F7F3FF"          # nền trang
+DEEP = "#7C5CD6"
+BG = "#F7F3FF"
 CARD = "#FFFFFF"
 BORDER = "#E4D9FB"
 BANK_COLORS = ["#A78BFA", "#C4B5FD", "#F0ABFC", "#93C5FD", "#D8B4FE", "#FBCFE8", "#BAE6FD", "#DDD6FE"]
-PILLAR_COLORS = ["#A78BFA", "#F0ABFC", "#93C5FD", "#FBCFE8"]
+PILLAR_COLORS = ["#A78BFA", "#F0ABFC", "#93C5FD", "#FBCFE8", "#C4B5FD", "#BAE6FD"]
 
 # ==========================================
 # 2. CSS GIAO DIỆN SÁNG TÍM PASTEL
@@ -95,7 +95,6 @@ st.markdown(f"""
     div[data-testid="stExpander"] summary {{
         background: {DEEP}; padding: 12px 16px;
     }}
-    div[data-testid="stExpander"] summary:hover {{ background: #6B49C4; }}
     div[data-testid="stExpander"] summary *,
     div[data-testid="stExpander"] summary svg {{
         color: #FFFFFF !important; fill: #FFFFFF !important; font-weight: 600;
@@ -124,6 +123,11 @@ st.markdown(f"""
     .bar-track {{ flex: 1; height: 10px; background: #EFE7FF; border-radius: 999px; overflow: hidden; }}
     .bar-fill {{ height: 100%; background: linear-gradient(90deg, #B79CFA, {DEEP}); border-radius: 999px; }}
     .bar-val {{ min-width: 48px; text-align: right; font-weight: 600; font-size: 0.85rem; }}
+
+    .coverage-good {{ color: #5B3FB5; font-weight: 700; }}
+    .coverage-warn {{ color: #9B6B00; font-weight: 700; }}
+    .nd {{ color: #9A8FB5; font-style: italic; }}
+
     div[data-testid="stMetricDelta"] {{
         background: #EFE7FF !important; border-radius: 999px; padding: 2px 10px;
     }}
@@ -175,6 +179,21 @@ def style_fig(fig, title, height=430, cartesian=True):
     return fig
 
 
+def maturity_level(score):
+    if pd.isna(score):
+        return "N/D"
+    score = float(score)
+    if score < 25:
+        return "Mức 1 – Khởi động"
+    elif score < 50:
+        return "Mức 2 – Bắt đầu"
+    elif score < 75:
+        return "Mức 3 – Hình thành"
+    elif score < 100:
+        return "Mức 4 – Nâng cao"
+    return "Mức 5 – Dẫn dắt"
+
+
 # ==========================================
 # 3. HEADER
 # ==========================================
@@ -186,85 +205,116 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 4. ĐỌC DỮ LIỆU
+# 4. ĐỌC DỮ LIỆU ĐÃ CHỐT
 # ==========================================
-CSV_FILE = "dti_banking_ranking_results.csv"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+CSV_FILE = os.path.join(DATA_DIR, "final_scoring.csv")
+EVIDENCE_FILE = os.path.join(DATA_DIR, "final_evidence_matrix.csv")
 
 if not os.path.exists(CSV_FILE):
-    st.error(f"Không tìm thấy file dữ liệu '{CSV_FILE}'. Hãy chạy file 'main.py' trước để xuất dữ liệu!")
+    st.error("Không tìm thấy data/final_scoring.csv. Hãy đặt file dữ liệu đã chốt vào thư mục data/.")
     st.stop()
 
 df = pd.read_csv(CSV_FILE)
 
-pillar_cols = ["Pillar_1_Score", "Pillar_2_Score", "Pillar_3_Score", "Pillar_4_Score"]
-pillar_names = ["P1: Quy mô App", "P2: Trải nghiệm CX", "P3: Hạ tầng & BCTN", "P4: Truyền thông"]
+# Chuẩn hóa tên cột từ bộ dữ liệu mới
+pillar_cols = ["Customer", "Strategy", "Technology", "Operations", "Culture", "Data"]
+pillar_names = [
+    "P1: Khách hàng",
+    "P2: Chiến lược",
+    "P3: Công nghệ",
+    "P4: Vận hành",
+    "P5: Văn hóa",
+    "P6: Dữ liệu",
+]
+
+for c in pillar_cols + ["DTI", "Criteria_Available", "Coverage"]:
+    if c in df.columns:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
+df = df.sort_values("DTI", ascending=False, na_position="last").reset_index(drop=True)
+df["Rank"] = range(1, len(df) + 1)
+df["Maturity"] = df["DTI"].apply(maturity_level)
 
 # ==========================================
 # 5. METRICS TỔNG QUAN
 # ==========================================
-top_1 = df.iloc[0]
-
-top_df = df.head(6)
+top_df = df.head(5)
 metric_cols = st.columns(len(top_df))
 for mc, (_, r) in zip(metric_cols, top_df.iterrows()):
-    mc.metric(f"TOP {int(r['Rank'])} DTI", f"{r['Bank']}", f"{r['DTI_Total_Score']:.2f} điểm", delta_color="off")
+    mc.metric(
+        f"TOP {int(r['Rank'])} DTI",
+        f"{r['Bank']}",
+        f"{r['DTI']:.2f} điểm",
+        delta_color="off"
+    )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
 # 6. BẢNG XẾP HẠNG
 # ==========================================
-section("Bảng xếp hạng tổng hợp DTI",
-        f"Đánh giá {len(df)} ngân hàng. Điểm tổng DTI là trung bình cộng của 4 trụ cột (mỗi trụ cột chiếm 25%), thang điểm 100.")
+section(
+    "Bảng xếp hạng tổng hợp DTI",
+    f"Đánh giá {len(df)} ngân hàng theo 6 trụ cột. DTI là trung bình cộng của 6 trụ cột, mỗi trụ cột có trọng số 1/6 (16,67%)."
+)
 
-df_display = df.rename(columns={
-    "Rank": "Hạng",
-    "Bank": "Ngân Hàng",
-    "DTI_Total_Score": "Tổng Điểm DTI",
-    "Pillar_1_Score": "P1: Quy Mô App (25%)",
-    "Pillar_2_Score": "P2: Trải Nghiệm CX (25%)",
-    "Pillar_3_Score": "P3: Hạ Tầng & BCTN (25%)",
-    "Pillar_4_Score": "P4: Truyền Thông (25%)",
-})
-
+# Bảng HTML giữ nguyên phong cách cũ, chỉ đổi sang 6 trụ cột mới.
 def render_table(d):
-    cols = ["Hạng", "Ngân Hàng", "Tổng Điểm DTI", "P1: Quy Mô App (25%)",
-            "P2: Trải Nghiệm CX (25%)", "P3: Hạ Tầng & BCTN (25%)", "P4: Truyền Thông (25%)"]
+    cols = ["Hạng", "Ngân Hàng", "Tổng Điểm DTI", "Mức trưởng thành", "Coverage"] + pillar_names
 
     def bar(v):
+        if pd.isna(v):
+            return '<span class="nd">N/D</span>'
         v = float(v)
-        return (f'<div class="bar-cell"><div class="bar-track"><div class="bar-fill" '
-                f'style="width:{max(0, min(v, 100))}%"></div></div><span class="bar-val">{v:.2f}</span></div>')
+        return (
+            f'<div class="bar-cell"><div class="bar-track"><div class="bar-fill" '
+            f'style="width:{max(0, min(v, 100))}%"></div></div>'
+            f'<span class="bar-val">{v:.2f}</span></div>'
+        )
 
     head = "".join(f"<th>{c}</th>" for c in cols)
     rows = ""
     for _, r in d.iterrows():
-        rows += ("<tr>"
-                 f'<td class="rank">{int(r["Hạng"])}</td>'
-                 f'<td class="bank">{r["Ngân Hàng"]}</td>'
-                 + "".join(f"<td>{bar(r[c])}</td>" for c in cols[2:])
-                 + "</tr>")
-    st.markdown(f'<div class="dti-wrap"><table class="dti-table"><thead><tr>{head}</tr></thead>'
-                f'<tbody>{rows}</tbody></table></div>', unsafe_allow_html=True)
+        coverage = float(r["Coverage"]) * 100 if float(r["Coverage"]) <= 1 else float(r["Coverage"])
+        coverage_class = "coverage-good" if coverage >= 75 else "coverage-warn"
+        rows += (
+            "<tr>"
+            f'<td class="rank">{int(r["Rank"])}</td>'
+            f'<td class="bank">{r["Bank"]}</td>'
+            f'<td>{bar(r["DTI"])}</td>'
+            f'<td>{r["Maturity"]}</td>'
+            f'<td class="{coverage_class}">{coverage:.1f}% ({int(r["Criteria_Available"])}/19)</td>'
+            + "".join(f"<td>{bar(r[c])}</td>" for c in pillar_cols)
+            + "</tr>"
+        )
+
+    st.markdown(
+        f'<div class="dti-wrap"><table class="dti-table"><thead><tr>{head}</tr></thead>'
+        f'<tbody>{rows}</tbody></table></div>',
+        unsafe_allow_html=True
+    )
 
 
-render_table(df_display)
-note("<b>Cách đọc bảng:</b> thanh màu càng dài nghĩa là điểm càng cao. "
-     "Hạng 1 là ngân hàng có tổng điểm DTI cao nhất. So sánh các cột P1–P4 để biết ngân hàng mạnh/yếu ở trụ cột nào.")
+render_table(df)
+note(
+    "<b>Cách đọc:</b> DTI là điểm tổng hợp trên thang 100. "
+    "Coverage chỉ phản ánh tỷ lệ tiêu chí có dữ liệu, không cộng điểm vào DTI. "
+    "N/D được giữ là thiếu dữ liệu và không bị quy về 0."
+)
 
 # ==========================================
 # 7. BIỂU ĐỒ 1 & 2
 # ==========================================
 section("Trực quan hóa kết quả đánh giá")
-
 col_a, col_b = st.columns(2)
 
-# ---- Biểu đồ cột
 with col_a:
     fig_bar = px.bar(
-        df, x="Bank", y="DTI_Total_Score", color="Bank", text_auto=".2f",
+        df, x="Bank", y="DTI", color="Bank", text_auto=".2f",
         color_discrete_sequence=BANK_COLORS,
-        labels={"Bank": "Ngân hàng", "DTI_Total_Score": "Điểm DTI tổng hợp (0–100)"},
+        labels={"Bank": "Ngân hàng", "DTI": "Điểm DTI tổng hợp (0–100)"},
     )
     fig_bar.update_traces(textposition="outside", marker_line_color="#FFFFFF", marker_line_width=2,
                           textfont=dict(color=DEEP))
@@ -273,20 +323,22 @@ with col_a:
     fig_bar.update_yaxes(gridcolor="#EDE6FB")
     style_fig(fig_bar, "Biểu đồ cột: Tổng điểm DTI của từng ngân hàng (thang 100)")
     st.plotly_chart(fig_bar, use_container_width=True)
-    note("<b>Biểu đồ này cho biết:</b> vị thế tổng thể về chuyển đổi số của mỗi ngân hàng.<br>"
-         "<b>Cách đọc:</b> trục ngang là ngân hàng, trục dọc là điểm DTI (0–100). Cột càng cao thì mức độ chuyển đổi số càng tốt; "
-         "con số trên đầu cột là điểm chính xác.")
-    gap = top_1["DTI_Total_Score"] - df.iloc[-1]["DTI_Total_Score"]
-    insight(f"<b>{top_1['Bank']}</b> dẫn đầu với {top_1['DTI_Total_Score']:.2f} điểm, "
-            f"cao hơn <b>{df.iloc[-1]['Bank']}</b> (hạng cuối) {gap:.2f} điểm.")
+    note(
+        "<b>Biểu đồ này cho biết:</b> vị thế tổng thể về chuyển đổi số của mỗi ngân hàng.<br>"
+        "<b>Cách đọc:</b> cột càng cao thì điểm DTI càng cao."
+    )
+    gap = float(df.iloc[0]["DTI"] - df.iloc[-1]["DTI"])
+    insight(
+        f"<b>{df.iloc[0]['Bank']}</b> dẫn đầu với {df.iloc[0]['DTI']:.2f} điểm, "
+        f"cao hơn <b>{df.iloc[-1]['Bank']}</b> {gap:.2f} điểm."
+    )
 
-# ---- Radar
 with col_b:
-    categories = ["Quy mô App (P1)", "Trải nghiệm CX (P2)", "Hạ tầng BCTN (P3)", "Truyền thông (P4)"]
+    categories = pillar_names
     fig_radar = go.Figure()
     for i, (_, row) in enumerate(df.iterrows()):
         color = BANK_COLORS[i % len(BANK_COLORS)]
-        vals = [row[c] for c in pillar_cols]
+        vals = [row[c] if not pd.isna(row[c]) else 0 for c in pillar_cols]
         fig_radar.add_trace(go.Scatterpolar(
             r=vals + [vals[0]],
             theta=categories + [categories[0]],
@@ -304,22 +356,21 @@ with col_b:
         ),
         showlegend=True,
     )
-    style_fig(fig_radar, "Biểu đồ mạng nhện: So sánh năng lực theo 4 trụ cột DTI", cartesian=False)
+    style_fig(fig_radar, "Biểu đồ mạng nhện: So sánh năng lực theo 6 trụ cột DTI", cartesian=False)
     st.plotly_chart(fig_radar, use_container_width=True)
-    note("<b>Biểu đồ này cho biết:</b> hình dạng năng lực của từng ngân hàng, mạnh ở đâu, yếu ở đâu.<br>"
-         "<b>Cách đọc:</b> mỗi đỉnh là một trụ cột, càng xa tâm điểm càng cao (tối đa 100). "
-         "Vùng màu phủ rộng và đều là ngân hàng phát triển cân bằng; vùng lệch về một phía là ngân hàng chỉ mạnh một mảng. "
-         "Bấm vào tên ngân hàng ở chú giải để ẩn/hiện để dễ so sánh.")
-    best_pillar = top_1[pillar_cols].astype(float).idxmax()
+    note(
+        "<b>Biểu đồ này cho biết:</b> hình dạng năng lực của từng ngân hàng theo 6 trụ cột. "
+        "Mỗi đỉnh càng xa tâm thì điểm càng cao."
+    )
+    best_pillar = df.iloc[0][pillar_cols].astype(float).idxmax()
     best_name = pillar_names[pillar_cols.index(best_pillar)]
-    insight(f"Điểm mạnh nhất của <b>{top_1['Bank']}</b> là <b>{best_name}</b> ({top_1[best_pillar]:.2f} điểm).")
+    insight(f"Điểm mạnh nhất của <b>{df.iloc[0]['Bank']}</b> là <b>{best_name}</b> ({df.iloc[0][best_pillar]:.2f} điểm).")
 
 # ==========================================
 # 8. BIỂU ĐỒ 3 & 4
 # ==========================================
 col_c, col_d = st.columns(2)
 
-# ---- Cột cụm theo trụ cột
 with col_c:
     df_long = df.melt(id_vars="Bank", value_vars=pillar_cols, var_name="Pillar", value_name="Score")
     df_long["Pillar"] = df_long["Pillar"].map(dict(zip(pillar_cols, pillar_names)))
@@ -332,47 +383,90 @@ with col_c:
     fig_group.update_yaxes(gridcolor="#EDE6FB", range=[0, 105])
     style_fig(fig_group, "Biểu đồ cột nhóm: Điểm từng trụ cột của các ngân hàng")
     st.plotly_chart(fig_group, use_container_width=True)
-    note("<b>Biểu đồ này cho biết:</b> trong cùng một trụ cột, ngân hàng nào đứng đầu.<br>"
-         "<b>Cách đọc:</b> mỗi nhóm cột là một trụ cột (P1–P4); mỗi màu là một ngân hàng. "
-         "Nhìn cột cao nhất trong từng nhóm để biết ngân hàng dẫn đầu của trụ cột đó.")
+    note(
+        "<b>Biểu đồ này cho biết:</b> trong cùng một trụ cột, ngân hàng nào có điểm cao hơn. "
+        "Mỗi màu tương ứng một ngân hàng."
+    )
     leaders = []
     for col, name in zip(pillar_cols, pillar_names):
-        leaders.append(f"{name.split(':')[0]}: <b>{df.loc[df[col].idxmax(), 'Bank']}</b>")
+        valid = df[col].dropna()
+        if len(valid):
+            bank = df.loc[valid.idxmax(), "Bank"]
+            leaders.append(f"{name.split(':')[0]}: <b>{bank}</b>")
     insight("Ngân hàng dẫn đầu từng trụ cột: " + " &nbsp;|&nbsp; ".join(leaders) + ".")
 
-# ---- Cột chồng đóng góp
 with col_d:
     df_stack = df.copy()
     fig_stack = go.Figure()
+    weight = 1 / 6
     for i, (col, name) in enumerate(zip(pillar_cols, pillar_names)):
+        vals = df_stack[col].fillna(0)
         fig_stack.add_trace(go.Bar(
-            y=df_stack["Bank"], x=df_stack[col] * 0.25, name=name, orientation="h",
+            y=df_stack["Bank"], x=vals * weight, name=name, orientation="h",
             marker=dict(color=PILLAR_COLORS[i], line=dict(color="#FFFFFF", width=1.5)),
-            text=[f"{v * 0.25:.1f}" for v in df_stack[col]], textposition="inside", textfont=dict(color=DEEP),
-            hovertemplate="%{y}<br>" + name + ": %{x:.2f} điểm<extra></extra>",
+            text=[f"{v * weight:.1f}" for v in vals], textposition="inside", textfont=dict(color=DEEP),
+            hovertemplate="%{y}<br>" + name + ": %{x:.2f} điểm đóng góp<extra></extra>",
         ))
     fig_stack.update_layout(barmode="stack", yaxis=dict(autorange="reversed"))
-    fig_stack.update_xaxes(title="Điểm đóng góp vào tổng DTI (mỗi trụ cột × 25%)", gridcolor="#EDE6FB")
+    fig_stack.update_xaxes(title="Điểm đóng góp vào tổng DTI (mỗi trụ cột × 1/6)", gridcolor="#EDE6FB")
     fig_stack.update_yaxes(title="Ngân hàng", showgrid=False)
-    style_fig(fig_stack, "Biểu đồ cột chồng: Cơ cấu đóng góp của 4 trụ cột vào tổng điểm DTI")
+    style_fig(fig_stack, "Biểu đồ cột chồng: Cơ cấu đóng góp của 6 trụ cột vào tổng điểm DTI")
     st.plotly_chart(fig_stack, use_container_width=True)
-    note("<b>Biểu đồ này cho biết:</b> tổng điểm DTI của mỗi ngân hàng được tạo nên từ những trụ cột nào.<br>"
-         "<b>Cách đọc:</b> mỗi thanh ngang là một ngân hàng, được chia thành 4 đoạn màu tương ứng 4 trụ cột "
-         "(đã nhân trọng số 25%). Tổng độ dài thanh chính là điểm DTI; đoạn nào dài hơn nghĩa là trụ cột đó đóng góp nhiều hơn.")
+    note(
+        "<b>Biểu đồ này cho biết:</b> tổng điểm DTI được tạo nên từ 6 trụ cột. "
+        "Mỗi đoạn đã nhân trọng số 1/6; tổng độ dài thanh chính là điểm DTI."
+    )
     weakest_bank = df.iloc[-1]
-    weak_col = weakest_bank[pillar_cols].astype(float).idxmin()
-    weak_name = pillar_names[pillar_cols.index(weak_col)]
-    insight(f"<b>{weakest_bank['Bank']}</b> đang yếu nhất ở <b>{weak_name}</b> "
-            f"({weakest_bank[weak_col]:.2f} điểm), đây là trụ cột cần ưu tiên cải thiện.")
+    valid_weak = weakest_bank[pillar_cols].dropna()
+    if len(valid_weak):
+        weak_col = valid_weak.astype(float).idxmin()
+        weak_name = pillar_names[pillar_cols.index(weak_col)]
+        insight(
+            f"<b>{weakest_bank['Bank']}</b> đang yếu nhất ở <b>{weak_name}</b> "
+            f"({weakest_bank[weak_col]:.2f} điểm)."
+        )
 
 # ==========================================
-# 9. BỘ TIÊU CHÍ
+# 9. BỘ TIÊU CHÍ & BẰNG CHỨNG
 # ==========================================
+from submetrics_section import render_submetrics
+render_submetrics(
+    df,
+    section,
+    note,
+    insight,
+    style_fig,
+    BANK_COLORS,
+    hex_to_rgba,
+    evidence_file=EVIDENCE_FILE,
+)
+
 st.markdown("---")
-with st.expander("Xem chi tiết cấu trúc bộ tiêu chí xếp hạng DTI"):
-    st.write("""
-    - **Trụ cột 1 (25%):** Mức độ phổ biến & quy mô người dùng (cào lượt tải & lượt đánh giá từ Google Play Store).
-    - **Trụ cột 2 (25%):** Chất lượng trải nghiệm người dùng CX (cào điểm đánh giá sao Rating Star).
-    - **Trụ cột 3 (25%):** Năng lực hạ tầng & sản phẩm số (quét từ khóa CĐS trong file Báo cáo thường niên PDF 2025).
-    - **Trụ cột 4 (25%):** Truyền thông & độ phủ thương hiệu số (cào số bài viết CĐS trên báo chí qua Google News RSS).
+with st.expander("Xem phương pháp tính điểm và cấu trúc bộ tiêu chí"):
+    st.markdown("""
+    **Khung tham chiếu:** 6 trụ cột của Quyết định 2158/QĐ-BTTTT, được nhóm điều chỉnh theo đặc thù ngân hàng và khả năng thu thập dữ liệu công khai.
+
+    **19 tiêu chí:**
+    - **P1 – Khách hàng:** C1 Bao phủ kênh/dịch vụ số; C2 Mức độ khách hàng sử dụng kênh số; C3 Chất lượng trải nghiệm số.
+    - **P2 – Chiến lược:** S1 Chiến lược & lộ trình CĐS; S2 Đầu tư/ngân sách CĐS; S3 Hệ sinh thái & đối tác số.
+    - **P3 – Công nghệ:** T1 eKYC & sinh trắc học; T2 Cho vay số; T3 AI/GenAI; T4 Open Banking/API.
+    - **P4 – Vận hành:** O1 Giao dịch trên kênh số; O2 Số hóa/tự động hóa quy trình; O3 Vận hành dịch vụ số.
+    - **P5 – Văn hóa:** H1 Đào tạo & năng lực số; H2 Đổi mới sáng tạo; H3 Quản trị thay đổi & văn hóa số.
+    - **P6 – Dữ liệu:** D1 Kiến trúc & tích hợp dữ liệu; D2 Quản trị & an toàn dữ liệu; D3 Phân tích dữ liệu & cá nhân hóa.
+
+    **Tính điểm:**
+    - Tiêu chí định lượng có số liệu phù hợp: dùng giá trị thực tế khi có thể quy đổi trực tiếp về thang 0–100.
+    - Tiêu chí định tính: rubric nội bộ 5 mức **0 / 30 / 50 / 70 / 100**.
+    - Điểm trụ cột = trung bình cộng các tiêu chí **có dữ liệu**, không biến N/D thành 0.
+    - DTI = trung bình cộng của 6 trụ cột, mỗi trụ cột **1/6 = 16,67%**.
+    - Coverage chỉ dùng để minh bạch mức độ đầy đủ dữ liệu, **không cộng vào điểm**.
+
+    **Mức trưởng thành:**
+    - 0–<25: Mức 1 – Khởi động
+    - 25–<50: Mức 2 – Bắt đầu
+    - 50–<75: Mức 3 – Hình thành
+    - 75–<100: Mức 4 – Nâng cao
+    - 100: Mức 5 – Dẫn dắt
+
+    **Nguyên tắc dữ liệu:** không dùng dữ liệu giả định, không median imputation, không tính điểm từ số lượt tải Google Play, số bài báo hoặc số lần xuất hiện từ khóa.
     """)
