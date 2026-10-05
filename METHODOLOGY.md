@@ -10,7 +10,7 @@ Cách gọi chính xác trong báo cáo:
 
 Quyết định 2158 cho phép các tổ chức khác tham khảo Bộ chỉ số và điều chỉnh hệ số theo đặc thù của mình.
 
-## 2. Sáu trụ cột và 18 tiêu chí
+## 2. Sáu trụ cột và 19 tiêu chí
 
 | Trụ cột | Mã | Tiêu chí |
 |---|---|---|
@@ -54,7 +54,11 @@ Các nguồn trên nếu có thể thu thập vẫn chỉ dùng làm **bằng ch
 
 Mỗi quan sát phải lưu tối thiểu:
 
-`Bank | Criterion | Raw_Value | Score | Evidence | Source | Page | URL | Collected_Date`
+`Bank | Criterion | Assessment_Year | Raw_Value | Unit | Numerator | Denominator | Score | Evidence | Source | Page | URL | Collected_Date | Evidence_Status`
+
+Đoạn trích tự động chỉ là bằng chứng ứng viên (`Candidate`). Chỉ dòng được người dùng kiểm tra và đổi thành `Approved` mới cho phép chấm điểm. C2/O1 cần lưu thông tin tử số và mẫu số/phạm vi tỷ lệ. Dữ liệu Google Play được ghi ngày thu thập; snapshot hiện tại không được tự gộp vào kết quả năm 2025. C3 chỉ được tính trong snapshot 2025 nếu có bằng chứng tương ứng đã được duyệt cho đúng kỳ.
+
+Nếu chưa có bất kỳ điểm chính thức nào, dashboard có thể dựng bảng **Dự thảo** từ các điểm đề xuất đã có và bằng chứng `Candidate` kỳ 2025 có nguồn cùng vị trí tra cứu. Bảng dự thảo không tự duyệt bằng chứng, không ghi đè `scoring_data.csv`, không dùng dữ liệu Google Play ngoài kỳ và không suy diễn tỷ lệ C2/O1. Chỉ dùng bảng này để rà soát; không coi thứ hạng dự thảo là kết quả chính thức.
 
 ## 4. Chấm điểm tiêu chí
 
@@ -129,9 +133,10 @@ Sáu trụ cột được đặt trọng số bằng nhau:
 
 Để tránh một ngân hàng có quá ít dữ liệu nhưng vẫn được xếp hạng:
 
-- Có ít nhất **12/18 tiêu chí** được chấm.
+- Có ít nhất **12/19 tiêu chí** được chấm.
 - Cả **6 trụ cột đều phải có ít nhất 1 tiêu chí có dữ liệu**.
-- Nếu không đạt: `Rank = N/A`, nhưng vẫn hiển thị các điểm đã có và tỷ lệ Data Coverage.
+- DTI tổng chỉ được tính khi đã có điểm cho đủ cả 6 trụ cột.
+- Nếu không đạt: `Rank = N/A`; các điểm trụ cột đã tính và tỷ lệ Data Coverage vẫn được hiển thị.
 
 Data Coverage chỉ là **chỉ số minh bạch dữ liệu**, không cộng điểm.
 
@@ -177,7 +182,7 @@ Do đó dashboard sẽ có:
 - Ranking tổng hợp;
 - DTI + Maturity Level;
 - 6 pillar scores;
-- 18 criterion scores;
+- 19 criterion scores;
 - Evidence/Source/URL/Page;
 - Data Coverage;
 - bảng so sánh và radar 6 trụ cột.

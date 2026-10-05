@@ -37,8 +37,8 @@ DATA_DIR.mkdir(exist_ok=True)
 CACHE_DIR.mkdir(exist_ok=True)
 
 MANUAL_PATH = DATA_DIR / "scoring_manual.csv"
-AUTO_CRITERIA = {"C3"}  # C3 tự tính từ Google Play, không nhập tay
-MANUAL_CRITERIA = [c for c in CRITERIA if c not in AUTO_CRITERIA]
+MANUAL_CRITERIA = [c for c in CRITERIA if c != "C3"]
+ASSESSMENT_YEAR = 2025
 MAX_SNIPPETS_PER_CRITERION = 8
 
 BANKS_CONFIG = {
@@ -50,7 +50,7 @@ BANKS_CONFIG = {
 }
 
 # Candidate evidence patterns. These FIND evidence; they do not themselves award points.
-# C3 không có pattern: điểm lấy tự động từ Google Play.
+# C3 has no report keyword pattern; it uses approved rating evidence only.
 PATTERNS = {
     "C1": [r"ngân hàng số", r"mobile banking", r"internet banking", r"kênh số", r"dịch vụ số", r"omni[- ]?channel", r"đa kênh"],
     "C2": [r"khách hàng số", r"khách hàng sử dụng.*kênh số", r"digital customer", r"active digital", r"người dùng.*ứng dụng"],
@@ -72,7 +72,11 @@ PATTERNS = {
     "D3": [r"phân tích dữ liệu", r"data analytics", r"machine learning", r"cá nhân hóa", r"personalization", r"dữ liệu.*ra quyết định"],
 }
 
-EVIDENCE_COLS = ["Bank", "Criterion", "Raw_Value", "Score", "Evidence", "Source", "Page", "URL", "Collected_Date"]
+EVIDENCE_COLS = [
+    "Bank", "Criterion", "Pillar", "Assessment_Year", "Raw_Value", "Unit",
+    "Numerator", "Denominator", "Score", "Evidence", "Source", "Page",
+    "URL", "Collected_Date", "Evidence_Status", "Reviewer_Note",
+]
 
 
 def normalize_text(text: str) -> str:
@@ -178,13 +182,17 @@ def extract_evidence(bank: str, filename: str) -> pd.DataFrame:
                     rows.append({
                         "Bank": bank,
                         "Criterion": code,
+                        "Pillar": CRITERIA[code]["pillar"],
+                        "Assessment_Year": ASSESSMENT_YEAR,
                         "Raw_Value": np.nan,
                         "Score": np.nan,
                         "Evidence": snippet,
-                        "Source": f"BCTN 2025 ({source})",
+                        "Source": f"{path.name} ({source})" if path else f"BCTN 2025 ({source})",
                         "Page": page_no,
                         "URL": "",
                         "Collected_Date": today,
+                        "Evidence_Status": "Candidate",
+                        "Reviewer_Note": "Đoạn trích tự động tìm thấy; cần kiểm tra trước khi dùng chấm điểm.",
                     })
                     count += 1
                     if count >= MAX_SNIPPETS_PER_CRITERION:
@@ -194,7 +202,9 @@ def extract_evidence(bank: str, filename: str) -> pd.DataFrame:
 
 def scrape_google_play(bank: str, app_id: str) -> dict:
     base = {"Bank": bank, "Rating_Star": np.nan, "Ratings_Count": np.nan, "Positive_Ratio": np.nan,
-            "App_Source": "missing", "App_URL": f"https://play.google.com/store/apps/details?id={app_id}"}
+            "App_Source": "missing", "App_URL": f"https://play.google.com/store/apps/details?id={app_id}",
+            "Assessment_Year": dt.date.today().year, "Collected_Date": dt.date.today().isoformat(),
+            "Scoring_Use": "Context only; not used in the 2025 DTI snapshot"}
     if play_app is None:
         base["App_Source"] = "package_missing"
         return base
@@ -221,6 +231,7 @@ def create_manual_template() -> None:
     tpl = pd.DataFrame({"Bank": list(BANKS_CONFIG)})
     for c in MANUAL_CRITERIA:
         tpl[f"{c}_Score"] = np.nan
+    tpl["Scoring_Note"] = ""
     tpl.to_csv(MANUAL_PATH, index=False, encoding="utf-8-sig")
 
 
@@ -231,17 +242,31 @@ def load_manual_scoring() -> pd.DataFrame:
     return pd.read_csv(MANUAL_PATH, encoding="utf-8-sig")
 
 
-def _has_evidence(ev: pd.DataFrame, bank: str, code: str) -> bool:
+def _approved_evidence(ev: pd.DataFrame, bank: str, code: str) -> pd.DataFrame:
     if ev.empty or "Bank" not in ev.columns or "Criterion" not in ev.columns:
-        return False
-    return not ev[(ev["Bank"] == bank) & (ev["Criterion"] == code)].empty
+        return pd.DataFrame()
+    subset = ev[(ev["Bank"] == bank) & (ev["Criterion"] == code)].copy()
+    if "Evidence_Status" not in subset.columns:
+        return pd.DataFrame()
+    subset = subset[subset["Evidence_Status"].astype(str).str.casefold().eq("approved")]
+    if "Assessment_Year" in subset.columns:
+        subset = subset[pd.to_numeric(subset["Assessment_Year"], errors="coerce") == ASSESSMENT_YEAR]
+    required = ["Evidence", "Source", "Collected_Date"]
+    if any(c not in subset.columns for c in required) or not {"URL", "Page"}.issubset(subset.columns):
+        return pd.DataFrame()
+    for col in required:
+        subset = subset[subset[col].fillna("").astype(str).str.strip().ne("")]
+    has_locator = (
+        subset["URL"].fillna("").astype(str).str.strip().ne("")
+        | subset["Page"].fillna("").astype(str).str.strip().ne("")
+    )
+    subset = subset[has_locator]
+    return subset
 
 
 def build_scoring_table() -> pd.DataFrame:
     evidence_path = DATA_DIR / "evidence_data.csv"
-    app_path = DATA_DIR / "app_data.csv"
     ev = pd.read_csv(evidence_path, encoding="utf-8-sig") if evidence_path.exists() else pd.DataFrame()
-    apps = pd.read_csv(app_path, encoding="utf-8-sig") if app_path.exists() else pd.DataFrame()
     manual = load_manual_scoring()
 
     valid_levels = set(LEVEL_TO_SCORE.values())
@@ -250,14 +275,20 @@ def build_scoring_table() -> pd.DataFrame:
     for bank in BANKS_CONFIG:
         row = {"Bank": bank}  # khóa là "C1", "T1"... (không có hậu tố "_Score")
 
-        # C3: tự động từ Google Play (proxy, không phải tiêu chí DBI gốc)
-        a = apps[apps["Bank"] == bank] if not apps.empty else pd.DataFrame()
-        if not a.empty:
-            row["C3"] = app_cx_score(a.iloc[0].get("Rating_Star"), a.iloc[0].get("Positive_Ratio"))
-        else:
+        c3_values = {}
+        for evidence_code, value_key in (("C3_RATING", "rating"), ("C3_POSITIVE", "positive")):
+            c3_evidence = _approved_evidence(ev, bank, evidence_code)
+            if not c3_evidence.empty:
+                raw_values = pd.to_numeric(c3_evidence["Raw_Value"], errors="coerce").dropna()
+                if not raw_values.empty:
+                    c3_values[value_key] = raw_values.iloc[-1]
+        try:
+            row["C3"] = app_cx_score(c3_values.get("rating"), c3_values.get("positive"))
+        except ValueError as exc:
+            warnings.append(f"{bank}-C3: {exc} -> bỏ (N/D)")
             row["C3"] = None
 
-        # Các tiêu chí còn lại: điểm nhập tay đã duyệt evidence
+        # All manual criteria require approved evidence in the 2025 assessment period.
         m = manual[manual["Bank"] == bank]
         for code in MANUAL_CRITERIA:
             col = f"{code}_Score" if f"{code}_Score" in manual.columns else code
@@ -268,12 +299,32 @@ def build_scoring_table() -> pd.DataFrame:
             if pd.isna(val):
                 row[code] = None  # N/D
                 continue
-            if not _has_evidence(ev, bank, code):
-                warnings.append(f"{bank}-{code}: có điểm nhưng không có dòng evidence -> bỏ (N/D)")
+            approved = _approved_evidence(ev, bank, code)
+            if approved.empty:
+                warnings.append(f"{bank}-{code}: chưa có bằng chứng được duyệt cho kỳ {ASSESSMENT_YEAR} -> bỏ (N/D)")
                 row[code] = None
                 continue
             try:
                 if CRITERIA[code]["type"] == "quantitative":  # C2, O1
+                    if not {"Numerator", "Denominator"}.issubset(approved.columns):
+                        warnings.append(f"{bank}-{code}: thiếu tử số/mẫu số -> bỏ (N/D)")
+                        row[code] = None
+                        continue
+                    ratio_rows = approved[
+                        approved["Numerator"].fillna("").astype(str).str.strip().ne("")
+                        & approved["Denominator"].fillna("").astype(str).str.strip().ne("")
+                    ]
+                    if ratio_rows.empty:
+                        warnings.append(f"{bank}-{code}: bằng chứng chưa xác nhận tử số/mẫu số -> bỏ (N/D)")
+                        row[code] = None
+                        continue
+                    raw_percentages = pd.to_numeric(ratio_rows["Raw_Value"], errors="coerce").dropna()
+                    if raw_percentages.empty or not (raw_percentages.sub(float(val)).abs() < 1e-6).any():
+                        warnings.append(f"{bank}-{code}: điểm không khớp tỷ lệ Raw_Value đã duyệt -> bỏ (N/D)")
+                        row[code] = None
+                        continue
+                    row[code] = direct_percentage_score(val)
+                elif CRITERIA[code]["type"] == "quantitative_proxy":
                     row[code] = direct_percentage_score(val)
                 elif float(val) in valid_levels:  # định tính: 0/30/50/70/100
                     row[code] = float(val)
@@ -292,6 +343,81 @@ def build_scoring_table() -> pd.DataFrame:
     return scored
 
 
+def build_provisional_scoring_table() -> pd.DataFrame:
+    """Build a clearly labelled draft from staged scores and Candidate evidence.
+
+    This does not approve evidence or alter the official scoring table. It lets
+    reviewers inspect the existing proposed results while preserving N/D for
+    unsupported, quantitative, or otherwise untraceable criteria.
+    """
+    evidence_path = DATA_DIR / "evidence_data.csv"
+    ev = pd.read_csv(evidence_path, encoding="utf-8-sig", keep_default_na=False) if evidence_path.exists() else pd.DataFrame()
+    manual = load_manual_scoring()
+    if not ev.empty:
+        ev["Assessment_Year"] = pd.to_numeric(ev.get("Assessment_Year"), errors="coerce")
+
+    rows = []
+    for bank in BANKS_CONFIG:
+        row = {"Bank": bank, "Result_Status": "Dự thảo — chưa duyệt bằng chứng"}
+        m = manual[manual["Bank"].astype(str) == bank]
+        for code, meta in CRITERIA.items():
+            row[code] = None
+            if ev.empty:
+                continue
+            candidates = ev[
+                ev["Bank"].astype(str).eq(bank)
+                & ev["Criterion"].astype(str).eq(code)
+                & pd.to_numeric(ev["Assessment_Year"], errors="coerce").eq(ASSESSMENT_YEAR)
+                & ev["Evidence_Status"].astype(str).str.casefold().isin(["candidate", "approved"])
+            ].copy()
+            if candidates.empty:
+                continue
+            has_trace = (
+                candidates["Evidence"].astype(str).str.strip().ne("")
+                & candidates["Source"].astype(str).str.strip().ne("")
+                & (
+                    candidates["URL"].astype(str).str.strip().ne("")
+                    | candidates["Page"].astype(str).str.strip().ne("")
+                )
+            )
+            candidates = candidates[has_trace]
+            if candidates.empty:
+                continue
+
+            if code == "C3":
+                # App-store scores collected in another year must not be
+                # backdated to the 2025 assessment period.
+                continue
+
+            score_col = f"{code}_Score" if f"{code}_Score" in manual.columns else code
+            if m.empty or score_col not in manual.columns:
+                continue
+            value = pd.to_numeric(m.iloc[0][score_col], errors="coerce")
+            if pd.isna(value):
+                continue
+
+            if meta["type"] == "quantitative":
+                valid_ratio = candidates[
+                    candidates["Numerator"].astype(str).str.strip().ne("")
+                    & candidates["Denominator"].astype(str).str.strip().ne("")
+                ]
+                raw = pd.to_numeric(valid_ratio["Raw_Value"], errors="coerce").dropna()
+                if raw.empty or not (raw.sub(float(value)).abs() < 1e-6).any():
+                    continue
+                try:
+                    row[code] = direct_percentage_score(float(value))
+                except ValueError:
+                    continue
+            elif float(value) in set(LEVEL_TO_SCORE.values()):
+                row[code] = float(value)
+
+        rows.append(row)
+
+    draft = rank_banks(pd.DataFrame(rows))
+    draft.to_csv(DATA_DIR / "scoring_provisional_data.csv", index=False, encoding="utf-8-sig")
+    return draft
+
+
 def run_pipeline():
     evidence_frames = []
     app_rows = []
@@ -301,6 +427,31 @@ def run_pipeline():
         print(f"[Google Play] {bank}")
         app_rows.append(scrape_google_play(bank, cfg["app_id"]))
     evidence = pd.concat(evidence_frames, ignore_index=True) if evidence_frames else pd.DataFrame(columns=EVIDENCE_COLS)
+    # Preserve reviewer decisions when the same extracted excerpt is regenerated.
+    old_path = DATA_DIR / "evidence_data.csv"
+    if old_path.exists() and not evidence.empty:
+        try:
+            old = pd.read_csv(old_path, encoding="utf-8-sig").fillna("")
+            key_cols = ["Bank", "Criterion", "Page", "Evidence"]
+            keep_cols = key_cols + [c for c in ("Evidence_Status", "Reviewer_Note", "Raw_Value", "Unit", "Numerator", "Denominator", "Score", "URL") if c in old.columns]
+            if all(c in old.columns for c in key_cols):
+                prior = old[keep_cols].drop_duplicates(key_cols, keep="last")
+                evidence = evidence.drop(columns=[c for c in keep_cols if c not in key_cols and c in evidence.columns]).merge(prior, on=key_cols, how="left", suffixes=("", "_old"))
+                for col in keep_cols:
+                    if col not in key_cols and f"{col}_old" in evidence.columns:
+                        evidence[col] = evidence[f"{col}_old"].where(evidence[f"{col}_old"].fillna("").astype(str).str.strip().ne(""), evidence[col])
+                        evidence.drop(columns=[f"{col}_old"], inplace=True)
+                evidence["Evidence_Status"] = evidence["Evidence_Status"].fillna("Candidate").replace("", "Candidate")
+                generated_keys = set(map(tuple, evidence[key_cols].fillna("").astype(str).to_numpy()))
+                old_keys = old[key_cols].fillna("").astype(str)
+                unmatched = old.loc[~old_keys.apply(tuple, axis=1).isin(generated_keys)].copy()
+                if not unmatched.empty:
+                    for col in EVIDENCE_COLS:
+                        if col not in unmatched.columns:
+                            unmatched[col] = ""
+                    evidence = pd.concat([evidence, unmatched[EVIDENCE_COLS]], ignore_index=True)
+        except Exception as exc:
+            print(f"[!] Không giữ được trạng thái duyệt evidence cũ: {type(exc).__name__}")
     evidence.to_csv(DATA_DIR / "evidence_data.csv", index=False, encoding="utf-8-sig")
     pd.DataFrame(app_rows).to_csv(DATA_DIR / "app_data.csv", index=False, encoding="utf-8-sig")
     scoring = build_scoring_table()
@@ -312,7 +463,7 @@ if __name__ == "__main__":
     print("\n=== KẾT QUẢ ===")
     print(f"Evidence rows: {len(evidence)}")
     print(f"App rows: {len(apps)}")
-    cols = ["Rank", "Bank", "DBI_Total_Score", "DBI_Level",
+    cols = ["Rank", "Bank", "DTI_Total_Score", "DTI_Level",
             "Criteria_Available", "Pillars_Available", "Data_Coverage", "Rank_Eligible"]
     print(scoring[cols].to_string(index=False))
     if not scoring["Rank_Eligible"].any():

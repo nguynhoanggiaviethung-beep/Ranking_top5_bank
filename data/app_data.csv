@@ -1,6 +1,6 @@
-﻿Bank,Rating_Star,Ratings_Count,Positive_Ratio,App_Source,App_URL
-Vietcombank,3.9707794,187288.0,73.56820196281544,Google Play live,https://play.google.com/store/apps/details?id=com.VCB
-VPBank,4.235021,185571.0,79.88747938738777,Google Play live,https://play.google.com/store/apps/details?id=com.vnpay.vpbankonline
-ACB,3.92235,39652.0,71.93230257018185,Google Play live,https://play.google.com/store/apps/details?id=mobile.acb.com.vn
-OCB,4.8120728,8702.0,96.28564857405703,Google Play live,https://play.google.com/store/apps/details?id=vn.com.ocb.awe
-Agribank,3.525502,152149.0,61.85612409214893,Google Play live,https://play.google.com/store/apps/details?id=com.vnpay.Agribank3g
+﻿Bank,Rating_Star,Ratings_Count,Positive_Ratio,App_Source,App_URL,Assessment_Year,Collected_Date,Scoring_Use
+Vietcombank,3.9706767,187291.0,73.56741633027914,Google Play live,https://play.google.com/store/apps/details?id=com.VCB,2026,2026-10-05,Context only; not used in the 2025 DTI snapshot
+VPBank,4.2351465,185574.0,79.89060731799322,Google Play live,https://play.google.com/store/apps/details?id=com.vnpay.vpbankonline,2026,2026-10-05,Context only; not used in the 2025 DTI snapshot
+ACB,3.9229002,39654.0,71.94814366424535,Google Play live,https://play.google.com/store/apps/details?id=mobile.acb.com.vn,2026,2026-10-05,Context only; not used in the 2025 DTI snapshot
+OCB,4.8127127,8705.0,96.29842510633407,Google Play live,https://play.google.com/store/apps/details?id=vn.com.ocb.awe,2026,2026-10-05,Context only; not used in the 2025 DTI snapshot
+Agribank,3.5255306,152152.0,61.85728275943659,Google Play live,https://play.google.com/store/apps/details?id=com.vnpay.Agribank3g,2026,2026-10-05,Context only; not used in the 2025 DTI snapshot

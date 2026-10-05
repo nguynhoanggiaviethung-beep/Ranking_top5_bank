@@ -257,7 +257,7 @@ def build_scores_from_evidence(evidence: pd.DataFrame) -> tuple[pd.DataFrame, pd
 
 
 # ---------------------------------------------------------------------------
-# 4. TRỤ CỘT, DBI, XẾP HẠNG
+# 4. TRỤ CỘT, DTI, XẾP HẠNG
 # ---------------------------------------------------------------------------
 def pillar_score(scores: list[float | None]) -> float | None:
     """Trung bình cộng các tiêu chí có dữ liệu; N/D không bị thay bằng 0."""
@@ -267,16 +267,17 @@ def pillar_score(scores: list[float | None]) -> float | None:
 
 def overall_score(pillar_scores: dict[str, float | None]) -> float | None:
     """
-    DBI = trung bình cộng các trụ cột có dữ liệu (đủ 6 thì mỗi trụ cột 1/6).
-    Trụ cột N/D không đưa vào mẫu số. Điều kiện đủ 6 trụ cột chỉ áp dụng cho
-    việc XẾP HẠNG (Rank_Eligible), không chặn việc hiển thị DBI phần đã tính.
+    DTI = trung bình cộng 6 trụ cột bằng trọng số nhau.
+    Thiếu bất kỳ trụ cột nào thì DTI tổng là N/D; các điểm trụ cột đã tính vẫn
+    được hiển thị riêng. Việc xếp hạng còn yêu cầu đủ số tiêu chí tối thiểu.
     """
-    valid = [float(v) for v in pillar_scores.values() if not _is_missing(v)]
-    return sum(valid) / len(valid) if valid else None
+    if len(pillar_scores) != len(PILLARS) or any(_is_missing(v) for v in pillar_scores.values()):
+        return None
+    return sum(float(v) for v in pillar_scores.values()) / len(PILLARS)
 
 
 def evaluate_bank(row: dict) -> dict:
-    """row chứa Score của các tiêu chí (NaN/None = N/D). Tính 6 trụ cột + DBI + coverage."""
+    """row chứa điểm tiêu chí (NaN/None = N/D). Tính 6 trụ cột + DTI + coverage."""
     out = dict(row)
     p_scores = {}
     for key, pillar in PILLARS.items():
@@ -289,8 +290,8 @@ def evaluate_bank(row: dict) -> dict:
         out[f"{key}_Coverage"] = sum(
             1 for c in PILLARS[key]["criteria"] if not _is_missing(row.get(c))
         )
-    out["DBI_Total_Score"] = total
-    out["DBI_Level"] = maturity_level(total)
+    out["DTI_Total_Score"] = total
+    out["DTI_Level"] = maturity_level(total)
     out["Pillars_Available"] = sum(1 for v in p_scores.values() if v is not None)
     out["Criteria_Available"] = sum(1 for c in CRITERIA if not _is_missing(row.get(c)))
     out["Criteria_Total"] = len(CRITERIA)
@@ -307,21 +308,21 @@ def evaluate_bank(row: dict) -> dict:
 
 def rank_banks(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Xếp hạng theo DBI (điểm đầy đủ, chưa làm tròn) giảm dần.
-    Không đủ điều kiện -> Rank = <NA> (hiển thị N/A), nhưng vẫn giữ DBI phần đã tính.
+    Xếp hạng theo DTI (điểm đầy đủ, chưa làm tròn) giảm dần.
+    Không đủ điều kiện -> Rank = <NA> (hiển thị N/A); điểm trụ cột vẫn được giữ.
     Bằng điểm hoàn toàn -> đồng hạng (method='min'); không dùng lượt tải/số bài báo làm tie-breaker.
     """
     out = pd.DataFrame([evaluate_bank(r.to_dict()) for _, r in df.iterrows()])
     out["Rank"] = pd.array([pd.NA] * len(out), dtype="Int64")
-    eligible = out["Rank_Eligible"] & out["DBI_Total_Score"].notna()
+    eligible = out["Rank_Eligible"] & out["DTI_Total_Score"].notna()
     if eligible.any():
         out.loc[eligible, "Rank"] = (
-            out.loc[eligible, "DBI_Total_Score"]
+            out.loc[eligible, "DTI_Total_Score"]
             .rank(method="min", ascending=False)
             .astype("Int64")
         )
     return out.sort_values(
-        ["Rank_Eligible", "DBI_Total_Score"],
+        ["Rank_Eligible", "DTI_Total_Score"],
         ascending=[False, False],
         na_position="last",
     ).reset_index(drop=True)

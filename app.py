@@ -209,14 +209,25 @@ st.markdown("""
 # ==========================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
-CSV_FILE = os.path.join(DATA_DIR, "final_scoring.csv")
-EVIDENCE_FILE = os.path.join(DATA_DIR, "final_evidence_matrix.csv")
+CSV_FILE = os.path.join(DATA_DIR, "scoring_data.csv")
+EVIDENCE_FILE = os.path.join(DATA_DIR, "evidence_data.csv")
 
 if not os.path.exists(CSV_FILE):
-    st.error("Không tìm thấy data/final_scoring.csv. Hãy đặt file dữ liệu đã chốt vào thư mục data/.")
+    st.error("Chưa có data/scoring_data.csv. Hãy chạy main.py để tạo bảng điểm từ các bằng chứng đã duyệt.")
     st.stop()
 
 df = pd.read_csv(CSV_FILE)
+is_provisional = not pd.to_numeric(df.get("Criteria_Available", pd.Series(dtype=float)), errors="coerce").fillna(0).gt(0).any()
+if is_provisional:
+    from main import build_provisional_scoring_table
+
+    df = build_provisional_scoring_table()
+    st.warning(
+        "Đang xem bảng điểm DỰ THẢO: điểm đề xuất chỉ được ghép với bằng chứng ứng viên có nguồn và vị trí tra cứu. "
+        "Bằng chứng chưa được duyệt nên kết quả này chỉ phục vụ rà soát, chưa phải kết quả chính thức. "
+        "Tiêu chí định lượng thiếu tỷ lệ đã xác nhận vẫn để N/D.",
+        icon="⚠️",
+    )
 
 # Chuẩn hóa tên cột từ bộ dữ liệu mới
 pillar_cols = ["Customer", "Strategy", "Technology", "Operations", "Culture", "Data"]
@@ -229,12 +240,21 @@ pillar_names = [
     "P6: Dữ liệu",
 ]
 
+score_column_map = {p: f"{p}_Score" for p in pillar_cols}
+for pillar, source_col in score_column_map.items():
+    if source_col in df.columns:
+        df[pillar] = df[source_col]
+if "DTI_Total_Score" in df.columns:
+    df["DTI"] = df["DTI_Total_Score"]
+if "Data_Coverage" in df.columns:
+    df["Coverage"] = df["Data_Coverage"] / 100
 for c in pillar_cols + ["DTI", "Criteria_Available", "Coverage"]:
     if c in df.columns:
         df[c] = pd.to_numeric(df[c], errors="coerce")
 
-df = df.sort_values("DTI", ascending=False, na_position="last").reset_index(drop=True)
-df["Rank"] = range(1, len(df) + 1)
+df = df.sort_values(["Rank_Eligible", "DTI"], ascending=[False, False], na_position="last").reset_index(drop=True)
+if "Rank" not in df.columns:
+    df["Rank"] = pd.NA
 df["Maturity"] = df["DTI"].apply(maturity_level)
 
 # ==========================================
@@ -244,9 +264,9 @@ top_df = df.head(5)
 metric_cols = st.columns(len(top_df))
 for mc, (_, r) in zip(metric_cols, top_df.iterrows()):
     mc.metric(
-        f"TOP {int(r['Rank'])} DTI",
+        f"{'TOP ' + str(int(r['Rank'])) if pd.notna(r['Rank']) else 'Chưa đủ điều kiện'}",
         f"{r['Bank']}",
-        f"{r['DTI']:.2f} điểm",
+        f"{r['DTI']:.2f} điểm" if pd.notna(r['DTI']) else "N/D",
         delta_color="off"
     )
 
@@ -256,8 +276,8 @@ st.markdown("<br>", unsafe_allow_html=True)
 # 6. BẢNG XẾP HẠNG
 # ==========================================
 section(
-    "Bảng xếp hạng tổng hợp DTI",
-    f"Đánh giá {len(df)} ngân hàng theo 6 trụ cột. DTI là trung bình cộng của 6 trụ cột, mỗi trụ cột có trọng số 1/6 (16,67%)."
+    "Bảng xếp hạng tổng hợp DTI" + (" — DỰ THẢO" if is_provisional else ""),
+    f"Đánh giá {len(df)} ngân hàng theo 6 trụ cột. Chỉ ngân hàng đủ ít nhất 12/19 tiêu chí và có dữ liệu ở cả 6 trụ cột mới được xếp hạng."
 )
 
 # Bảng HTML giữ nguyên phong cách cũ, chỉ đổi sang 6 trụ cột mới.
@@ -281,7 +301,7 @@ def render_table(d):
         coverage_class = "coverage-good" if coverage >= 75 else "coverage-warn"
         rows += (
             "<tr>"
-            f'<td class="rank">{int(r["Rank"])}</td>'
+            f'<td class="rank">{int(r["Rank"]) if pd.notna(r["Rank"]) else "N/A"}</td>'
             f'<td class="bank">{r["Bank"]}</td>'
             f'<td>{bar(r["DTI"])}</td>'
             f'<td>{r["Maturity"]}</td>'
@@ -327,18 +347,19 @@ with col_a:
         "<b>Biểu đồ này cho biết:</b> vị thế tổng thể về chuyển đổi số của mỗi ngân hàng.<br>"
         "<b>Cách đọc:</b> cột càng cao thì điểm DTI càng cao."
     )
-    gap = float(df.iloc[0]["DTI"] - df.iloc[-1]["DTI"])
-    insight(
-        f"<b>{df.iloc[0]['Bank']}</b> dẫn đầu với {df.iloc[0]['DTI']:.2f} điểm, "
-        f"cao hơn <b>{df.iloc[-1]['Bank']}</b> {gap:.2f} điểm."
-    )
+    eligible_df = df[df["Rank_Eligible"].astype(bool) & df["DTI"].notna()]
+    if not eligible_df.empty:
+        leader = eligible_df.iloc[0]
+        insight(f"<b>{leader['Bank']}</b> đang đứng đầu nhóm đủ điều kiện với {leader['DTI']:.2f} điểm.")
+    else:
+        insight("Chưa có ngân hàng đủ điều kiện xếp hạng. Các điểm trụ cột và độ phủ vẫn được hiển thị để rà soát dữ liệu.")
 
 with col_b:
     categories = pillar_names
     fig_radar = go.Figure()
     for i, (_, row) in enumerate(df.iterrows()):
         color = BANK_COLORS[i % len(BANK_COLORS)]
-        vals = [row[c] if not pd.isna(row[c]) else 0 for c in pillar_cols]
+        vals = [row[c] if not pd.isna(row[c]) else None for c in pillar_cols]
         fig_radar.add_trace(go.Scatterpolar(
             r=vals + [vals[0]],
             theta=categories + [categories[0]],
@@ -362,9 +383,11 @@ with col_b:
         "<b>Biểu đồ này cho biết:</b> hình dạng năng lực của từng ngân hàng theo 6 trụ cột. "
         "Mỗi đỉnh càng xa tâm thì điểm càng cao."
     )
-    best_pillar = df.iloc[0][pillar_cols].astype(float).idxmax()
-    best_name = pillar_names[pillar_cols.index(best_pillar)]
-    insight(f"Điểm mạnh nhất của <b>{df.iloc[0]['Bank']}</b> là <b>{best_name}</b> ({df.iloc[0][best_pillar]:.2f} điểm).")
+    available_pillars = df.iloc[0][pillar_cols].dropna()
+    if not available_pillars.empty:
+        best_pillar = available_pillars.astype(float).idxmax()
+        best_name = pillar_names[pillar_cols.index(best_pillar)]
+        insight(f"Điểm trụ cột cao nhất của <b>{df.iloc[0]['Bank']}</b> là <b>{best_name}</b> ({df.iloc[0][best_pillar]:.2f} điểm).")
 
 # ==========================================
 # 8. BIỂU ĐỒ 3 & 4
@@ -400,11 +423,11 @@ with col_d:
     fig_stack = go.Figure()
     weight = 1 / 6
     for i, (col, name) in enumerate(zip(pillar_cols, pillar_names)):
-        vals = df_stack[col].fillna(0)
+        vals = df_stack[col]
         fig_stack.add_trace(go.Bar(
             y=df_stack["Bank"], x=vals * weight, name=name, orientation="h",
             marker=dict(color=PILLAR_COLORS[i], line=dict(color="#FFFFFF", width=1.5)),
-            text=[f"{v * weight:.1f}" for v in vals], textposition="inside", textfont=dict(color=DEEP),
+            text=[f"{v * weight:.1f}" if pd.notna(v) else "" for v in vals], textposition="inside", textfont=dict(color=DEEP),
             hovertemplate="%{y}<br>" + name + ": %{x:.2f} điểm đóng góp<extra></extra>",
         ))
     fig_stack.update_layout(barmode="stack", yaxis=dict(autorange="reversed"))
