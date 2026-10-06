@@ -36,9 +36,9 @@ CRITERIA = {
     "C2": {"pillar": "Customer", "name": "Mức độ khách hàng sử dụng kênh số", "type": "quantitative",
            "source": "BCTN 2025 / tài liệu chính thức",
            "description": "Tỷ lệ khách hàng số/khách hàng hoạt động hoặc chỉ tiêu tương đương; chỉ chấm khi có tử số và mẫu số rõ ràng."},
-    "C3": {"pillar": "Customer", "name": "Chất lượng trải nghiệm số", "type": "quantitative_proxy",
-           "source": "Google Play",
-           "description": "Proxy công khai (không phải tiêu chí DBI gốc): Rating/5*100 và Positive Ratio; có cả hai thì lấy trung bình."},
+    "C3": {"pillar": "Customer", "name": "Hỗ trợ khách hàng trên kênh số", "type": "qualitative",
+           "source": "BCTN 2025 / báo cáo phát triển bền vững / nguồn chính thức",
+           "description": "Mức độ triển khai hỗ trợ khách hàng số/đa kênh, chatbot/voicebot, thời gian phục vụ và kết quả vận hành được công bố."},
 
     "S1": {"pillar": "Strategy", "name": "Chiến lược và lộ trình chuyển đổi số", "type": "qualitative",
            "source": "BCTN 2025 + tài liệu chính thức",
@@ -155,26 +155,6 @@ def direct_percentage_score(value: float | None) -> float | None:
     return value
 
 
-def app_cx_score(rating_star=None, positive_ratio=None) -> float | None:
-    """
-    C3: proxy trải nghiệm số (không phải tiêu chí DBI gốc).
-    Rating Google Play: Rating/5*100; Positive Ratio: giữ nguyên %.
-    Có cả hai -> trung bình; chỉ có một -> dùng cái đó; không có -> N/D.
-    """
-    scores = []
-    if not _is_missing(rating_star):
-        rating_star = float(rating_star)
-        if not 0 <= rating_star <= 5:
-            raise ValueError("Rating phải nằm trong [0,5].")
-        scores.append(rating_star / 5 * 100)
-    if not _is_missing(positive_ratio):
-        positive_ratio = float(positive_ratio)
-        if not 0 <= positive_ratio <= 100:
-            raise ValueError("Positive ratio phải nằm trong [0,100].")
-        scores.append(positive_ratio)
-    return sum(scores) / len(scores) if scores else None
-
-
 # ---------------------------------------------------------------------------
 # 3. TỪ BẰNG CHỨNG -> BẢNG ĐIỂM CÁC TIÊU CHÍ
 # ---------------------------------------------------------------------------
@@ -185,8 +165,7 @@ def build_scores_from_evidence(evidence: pd.DataFrame) -> tuple[pd.DataFrame, pd
     Quy ước Raw_Value trong bảng evidence:
       - tiêu chí định tính : mức 1..5
       - C2, O1             : tỷ lệ % (0..100), chỉ nhập khi có mẫu số rõ ràng
-      - C3                 : dùng 2 dòng riêng, Criterion = "C3_RATING" (0..5)
-                             và "C3_POSITIVE" (0..100)
+      - C3                 : hỗ trợ khách hàng số, chấm thủ công theo rubric 0/30/50/70/100
 
     Dòng thiếu Bank/Criterion/Raw_Value/Source/URL/Collected_Date -> KHÔNG chấm (N/D).
     Trả về (scores_wide, audit):
@@ -202,7 +181,6 @@ def build_scores_from_evidence(evidence: pd.DataFrame) -> tuple[pd.DataFrame, pd
         return pd.isna(v) or str(v).strip() == ""
 
     status, scores = [], []
-    c3_parts: dict[str, dict[str, float]] = {}
     for idx, r in ev.iterrows():
         missing = [c for c in EVIDENCE_REQUIRED if blank(r[c])]
         if missing:
@@ -212,24 +190,12 @@ def build_scores_from_evidence(evidence: pd.DataFrame) -> tuple[pd.DataFrame, pd
         crit = str(r["Criterion"]).strip().upper()
         try:
             raw = float(r["Raw_Value"])
-            if crit == "C3_RATING":
-                c3_parts.setdefault(r["Bank"], {})["rating"] = raw
-                app_cx_score(rating_star=raw)          # chỉ để validate
-                s = None
-            elif crit == "C3_POSITIVE":
-                c3_parts.setdefault(r["Bank"], {})["positive"] = raw
-                app_cx_score(positive_ratio=raw)
-                s = None
-            elif crit not in CRITERIA:
+            if crit not in CRITERIA:
                 status.append(f"Loại: tiêu chí '{crit}' không tồn tại")
                 scores.append(None)
                 continue
             elif CRITERIA[crit]["type"] == "quantitative":
                 s = direct_percentage_score(raw)
-            elif crit == "C3":
-                status.append("Loại: C3 phải nhập qua C3_RATING / C3_POSITIVE")
-                scores.append(None)
-                continue
             else:
                 s = score_from_level(int(raw))
             status.append("Used")
@@ -249,10 +215,6 @@ def build_scores_from_evidence(evidence: pd.DataFrame) -> tuple[pd.DataFrame, pd
     used = ev[(ev["Status"] == "Used") & ev["Score"].notna()]
     for _, r in used.iterrows():
         wide.loc[wide["Bank"] == r["Bank"], r["Criterion"]] = r["Score"]
-    for bank, parts in c3_parts.items():
-        c3 = app_cx_score(parts.get("rating"), parts.get("positive"))
-        if c3 is not None:
-            wide.loc[wide["Bank"] == bank, "C3"] = c3
     return wide, ev
 
 
@@ -315,12 +277,16 @@ def rank_banks(df: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame([evaluate_bank(r.to_dict()) for _, r in df.iterrows()])
     out["Rank"] = pd.array([pd.NA] * len(out), dtype="Int64")
     eligible = out["Rank_Eligible"] & out["DTI_Total_Score"].notna()
-    if eligible.any():
+    eligible_count = int(eligible.sum())
+    out["Rank_Status"] = "Không đủ dữ liệu để xếp hạng"
+    out.loc[eligible, "Rank_Status"] = "Đủ dữ liệu; chưa đủ ngân hàng so sánh"
+    if eligible_count >= 2:
         out.loc[eligible, "Rank"] = (
             out.loc[eligible, "DTI_Total_Score"]
             .rank(method="min", ascending=False)
             .astype("Int64")
         )
+        out.loc[eligible, "Rank_Status"] = "Đã xếp hạng"
     return out.sort_values(
         ["Rank_Eligible", "DTI_Total_Score"],
         ascending=[False, False],

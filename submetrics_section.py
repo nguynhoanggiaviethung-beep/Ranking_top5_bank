@@ -203,7 +203,7 @@ def render_submetrics(df, section, note, insight, style_fig, bank_colors, hex_to
             bank_options = ["Tất cả"] + sorted(evidence.get("Bank", pd.Series(dtype=str)).dropna().unique().tolist())
             selected_bank = st.selectbox("Ngân hàng", bank_options, key="evidence_bank")
             present_criteria = evidence.get("Criterion", pd.Series(dtype=str)).astype(str).unique().tolist()
-            criterion_options = ["Tất cả"] + [c for c in list(CRITERIA) + ["C3_RATING", "C3_POSITIVE"] if c in present_criteria]
+            criterion_options = ["Tất cả"] + [c for c in list(CRITERIA) if c in present_criteria]
             selected_criterion = st.selectbox("Tiêu chí", criterion_options, key="evidence_criterion")
             view = evidence.copy()
             if selected_bank != "Tất cả":

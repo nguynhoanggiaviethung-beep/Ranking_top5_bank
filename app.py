@@ -211,23 +211,31 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 CSV_FILE = os.path.join(DATA_DIR, "scoring_data.csv")
 EVIDENCE_FILE = os.path.join(DATA_DIR, "evidence_data.csv")
+PROVISIONAL_FILE = os.path.join(DATA_DIR, "scoring_provisional_data.csv")
 
 if not os.path.exists(CSV_FILE):
     st.error("Chưa có data/scoring_data.csv. Hãy chạy main.py để tạo bảng điểm từ các bằng chứng đã duyệt.")
     st.stop()
 
 df = pd.read_csv(CSV_FILE)
-is_provisional = not pd.to_numeric(df.get("Criteria_Available", pd.Series(dtype=float)), errors="coerce").fillna(0).gt(0).any()
+view_mode = st.radio(
+    "Chế độ kết quả",
+    ["Xếp hạng tham khảo — đủ 5 ngân hàng", "Kết quả chính thức — chỉ bằng chứng đã duyệt"],
+    horizontal=True,
+    key="ranking_view_mode",
+)
+is_provisional = view_mode.startswith("Xếp hạng tham khảo")
 if is_provisional:
     from main import build_provisional_scoring_table
 
     df = build_provisional_scoring_table()
     st.warning(
-        "Đang xem bảng điểm DỰ THẢO: điểm đề xuất chỉ được ghép với bằng chứng ứng viên có nguồn và vị trí tra cứu. "
-        "Bằng chứng chưa được duyệt nên kết quả này chỉ phục vụ rà soát, chưa phải kết quả chính thức. "
-        "Tiêu chí định lượng thiếu tỷ lệ đã xác nhận vẫn để N/D.",
+        "Đây là bảng xếp hạng tham khảo để so sánh đủ 5 ngân hàng. Điểm đề xuất được ghép với bằng chứng ứng viên có nguồn và vị trí tra cứu; "
+        "bằng chứng chưa được duyệt độc lập nên thứ hạng chưa phải kết quả chính thức. Tiêu chí định lượng thiếu tỷ lệ đã xác nhận vẫn để N/D.",
         icon="⚠️",
     )
+else:
+    st.info("Đang xem kết quả chính thức; chỉ tính bằng chứng đã duyệt. Ngân hàng chưa đủ ngưỡng sẽ hiện N/D và không có hạng.")
 
 # Chuẩn hóa tên cột từ bộ dữ liệu mới
 pillar_cols = ["Customer", "Strategy", "Technology", "Operations", "Culture", "Data"]
@@ -276,8 +284,8 @@ st.markdown("<br>", unsafe_allow_html=True)
 # 6. BẢNG XẾP HẠNG
 # ==========================================
 section(
-    "Bảng xếp hạng tổng hợp DTI" + (" — DỰ THẢO" if is_provisional else ""),
-    f"Đánh giá {len(df)} ngân hàng theo 6 trụ cột. Chỉ ngân hàng đủ ít nhất 12/19 tiêu chí và có dữ liệu ở cả 6 trụ cột mới được xếp hạng."
+    "Bảng xếp hạng tổng hợp DTI" + (" — THAM KHẢO" if is_provisional else " — CHÍNH THỨC"),
+    f"Đánh giá {len(df)} ngân hàng theo 6 trụ cột. Điều kiện xếp hạng là ít nhất 12/19 tiêu chí và có dữ liệu ở cả 6 trụ cột."
 )
 
 # Bảng HTML giữ nguyên phong cách cũ, chỉ đổi sang 6 trụ cột mới.
@@ -470,7 +478,7 @@ with st.expander("Xem phương pháp tính điểm và cấu trúc bộ tiêu ch
     **Khung tham chiếu:** 6 trụ cột của Quyết định 2158/QĐ-BTTTT, được nhóm điều chỉnh theo đặc thù ngân hàng và khả năng thu thập dữ liệu công khai.
 
     **19 tiêu chí:**
-    - **P1 – Khách hàng:** C1 Bao phủ kênh/dịch vụ số; C2 Mức độ khách hàng sử dụng kênh số; C3 Chất lượng trải nghiệm số.
+    - **P1 – Khách hàng:** C1 Bao phủ kênh/dịch vụ số; C2 Mức độ khách hàng sử dụng kênh số; C3 Hỗ trợ khách hàng trên kênh số.
     - **P2 – Chiến lược:** S1 Chiến lược & lộ trình CĐS; S2 Đầu tư/ngân sách CĐS; S3 Hệ sinh thái & đối tác số.
     - **P3 – Công nghệ:** T1 eKYC & sinh trắc học; T2 Cho vay số; T3 AI/GenAI; T4 Open Banking/API.
     - **P4 – Vận hành:** O1 Giao dịch trên kênh số; O2 Số hóa/tự động hóa quy trình; O3 Vận hành dịch vụ số.

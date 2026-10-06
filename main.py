@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, re, time, datetime as dt, unicodedata
+import os, re, time, datetime as dt, unicodedata, sys
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -26,8 +26,14 @@ except Exception:
 
 from scoring_rules import (
     CRITERIA, PILLARS, LEVEL_TO_SCORE,
-    rank_banks, app_cx_score, direct_percentage_score, MIN_CRITERIA_FOR_RANK,
+    rank_banks, direct_percentage_score, MIN_CRITERIA_FOR_RANK,
 )
+
+# Windows consoles using legacy code pages cannot print every Vietnamese/Unicode
+# character in warnings. Keep the pipeline running and preserve readable output
+# where supported instead of raising UnicodeEncodeError during scoring.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE_DIR = Path(__file__).resolve().parent
 PDF_DIR = BASE_DIR / "pdf_reports"
@@ -37,7 +43,7 @@ DATA_DIR.mkdir(exist_ok=True)
 CACHE_DIR.mkdir(exist_ok=True)
 
 MANUAL_PATH = DATA_DIR / "scoring_manual.csv"
-MANUAL_CRITERIA = [c for c in CRITERIA if c != "C3"]
+MANUAL_CRITERIA = list(CRITERIA)
 ASSESSMENT_YEAR = 2025
 MAX_SNIPPETS_PER_CRITERION = 8
 
@@ -50,7 +56,7 @@ BANKS_CONFIG = {
 }
 
 # Candidate evidence patterns. These FIND evidence; they do not themselves award points.
-# C3 has no report keyword pattern; it uses approved rating evidence only.
+# C3 is assessed from documented digital customer-support capability in 2025.
 PATTERNS = {
     "C1": [r"ngân hàng số", r"mobile banking", r"internet banking", r"kênh số", r"dịch vụ số", r"omni[- ]?channel", r"đa kênh"],
     "C2": [r"khách hàng số", r"khách hàng sử dụng.*kênh số", r"digital customer", r"active digital", r"người dùng.*ứng dụng"],
@@ -275,20 +281,7 @@ def build_scoring_table() -> pd.DataFrame:
     for bank in BANKS_CONFIG:
         row = {"Bank": bank}  # khóa là "C1", "T1"... (không có hậu tố "_Score")
 
-        c3_values = {}
-        for evidence_code, value_key in (("C3_RATING", "rating"), ("C3_POSITIVE", "positive")):
-            c3_evidence = _approved_evidence(ev, bank, evidence_code)
-            if not c3_evidence.empty:
-                raw_values = pd.to_numeric(c3_evidence["Raw_Value"], errors="coerce").dropna()
-                if not raw_values.empty:
-                    c3_values[value_key] = raw_values.iloc[-1]
-        try:
-            row["C3"] = app_cx_score(c3_values.get("rating"), c3_values.get("positive"))
-        except ValueError as exc:
-            warnings.append(f"{bank}-C3: {exc} -> bỏ (N/D)")
-            row["C3"] = None
-
-        # All manual criteria require approved evidence in the 2025 assessment period.
+        # All criteria, including C3, require approved evidence in the 2025 period.
         m = manual[manual["Bank"] == bank]
         for code in MANUAL_CRITERIA:
             col = f"{code}_Score" if f"{code}_Score" in manual.columns else code
@@ -384,11 +377,6 @@ def build_provisional_scoring_table() -> pd.DataFrame:
             if candidates.empty:
                 continue
 
-            if code == "C3":
-                # App-store scores collected in another year must not be
-                # backdated to the 2025 assessment period.
-                continue
-
             score_col = f"{code}_Score" if f"{code}_Score" in manual.columns else code
             if m.empty or score_col not in manual.columns:
                 continue
@@ -418,6 +406,70 @@ def build_provisional_scoring_table() -> pd.DataFrame:
     return draft
 
 
+def build_evidence_review_matrix() -> pd.DataFrame:
+    """Create a reviewer queue for all bank/criterion pairs; this is not a score source."""
+    evidence_path = DATA_DIR / "evidence_data.csv"
+    ev = pd.read_csv(evidence_path, encoding="utf-8-sig", keep_default_na=False) if evidence_path.exists() else pd.DataFrame(columns=EVIDENCE_COLS)
+    manual = load_manual_scoring().fillna("")
+    rows = []
+
+    for bank in BANKS_CONFIG:
+        bank_manual = manual[manual["Bank"].astype(str).eq(bank)]
+        for code in CRITERIA:
+            group = ev[(ev["Bank"].astype(str) == bank) & (ev["Criterion"].astype(str) == code)] if not ev.empty else ev
+            score_col = f"{code}_Score"
+            proposed = str(bank_manual.iloc[0].get(score_col, "")).strip() if not bank_manual.empty else ""
+            approved_rows = group[
+                group["Evidence_Status"].astype(str).str.casefold().eq("approved")
+                & pd.to_numeric(group["Assessment_Year"], errors="coerce").eq(ASSESSMENT_YEAR)
+            ] if not group.empty else group
+            if not approved_rows.empty:
+                status = "ĐÃ DUYỆT"
+                note = "Có bằng chứng đã duyệt cho kỳ đánh giá 2025."
+            elif proposed:
+                status = "CẦN ĐỐI CHIẾU"
+                note = "Điểm hiện tại là đề xuất; kiểm tra nội dung, mức rubric, nguồn và vị trí trước khi duyệt."
+            elif group.empty:
+                status = "N/D - CẦN TÌM NGUỒN"
+                note = "Chưa có dòng bằng chứng ứng viên cho tiêu chí này."
+            else:
+                status = "N/D - CẦN RÀ SOÁT"
+                note = "Chưa có điểm đề xuất; rà bằng chứng trước khi quyết định chấm hay giữ N/D."
+
+            traceable = group[
+                group["Evidence"].astype(str).str.strip().ne("")
+                & group["Source"].astype(str).str.strip().ne("")
+                & group["Collected_Date"].astype(str).str.strip().ne("")
+                & (
+                    group["URL"].astype(str).str.strip().ne("")
+                    | group["Page"].astype(str).str.strip().ne("")
+                )
+            ] if not group.empty else group
+            ratio_count = 0
+            if code in {"C2", "O1"} and not group.empty:
+                ratio_count = int(
+                    group["Numerator"].astype(str).str.strip().ne("")
+                    .mul(group["Denominator"].astype(str).str.strip().ne(""))
+                    .sum()
+                )
+                note += f" Dòng ứng viên có cả tử số và mẫu số: {ratio_count}; cần xác minh cùng phạm vi."
+
+            rows.append({
+                "Bank": bank,
+                "Criterion": code,
+                "Proposed_Score": proposed,
+                "Candidate_Rows": len(group),
+                "Traceable_Candidate_Rows": len(traceable),
+                "Approved_Rows": int(group["Evidence_Status"].astype(str).str.casefold().eq("approved").sum()) if not group.empty else 0,
+                "Review_Status": status,
+                "Review_Note": note,
+            })
+
+    matrix = pd.DataFrame(rows)
+    matrix.to_csv(DATA_DIR / "evidence_review_matrix.csv", index=False, encoding="utf-8-sig")
+    return matrix
+
+
 def run_pipeline():
     evidence_frames = []
     app_rows = []
@@ -435,7 +487,17 @@ def run_pipeline():
             key_cols = ["Bank", "Criterion", "Page", "Evidence"]
             keep_cols = key_cols + [c for c in ("Evidence_Status", "Reviewer_Note", "Raw_Value", "Unit", "Numerator", "Denominator", "Score", "URL") if c in old.columns]
             if all(c in old.columns for c in key_cols):
-                prior = old[keep_cols].drop_duplicates(key_cols, keep="last")
+                prior = old[keep_cols].copy()
+                # If duplicated excerpts exist, an explicit reviewer approval
+                # must take precedence over a Candidate copy of the same row.
+                prior["_approved_priority"] = prior.get(
+                    "Evidence_Status", pd.Series(index=prior.index, dtype=object)
+                ).astype(str).str.casefold().eq("approved").astype(int)
+                prior = (
+                    prior.sort_values("_approved_priority")
+                    .drop_duplicates(key_cols, keep="last")
+                    .drop(columns="_approved_priority")
+                )
                 evidence = evidence.drop(columns=[c for c in keep_cols if c not in key_cols and c in evidence.columns]).merge(prior, on=key_cols, how="left", suffixes=("", "_old"))
                 for col in keep_cols:
                     if col not in key_cols and f"{col}_old" in evidence.columns:
@@ -455,6 +517,10 @@ def run_pipeline():
     evidence.to_csv(DATA_DIR / "evidence_data.csv", index=False, encoding="utf-8-sig")
     pd.DataFrame(app_rows).to_csv(DATA_DIR / "app_data.csv", index=False, encoding="utf-8-sig")
     scoring = build_scoring_table()
+    # Keep the clearly labelled draft in sync with the just-refreshed evidence
+    # and manual-score inputs. The official table remains gated by Approved.
+    build_provisional_scoring_table()
+    build_evidence_review_matrix()
     return evidence, pd.DataFrame(app_rows), scoring
 
 
@@ -469,3 +535,9 @@ if __name__ == "__main__":
     if not scoring["Rank_Eligible"].any():
         print(f"\nChưa ngân hàng nào đủ điều kiện xếp hạng (cần >={MIN_CRITERIA_FOR_RANK}/{len(CRITERIA)} tiêu chí và đủ 6 trụ cột).")
         print(f"Hãy duyệt data/evidence_data.csv rồi điền điểm vào {MANUAL_PATH.name}.")
+    draft_path = DATA_DIR / "scoring_provisional_data.csv"
+    if draft_path.exists():
+        draft = pd.read_csv(draft_path, encoding="utf-8-sig")
+        print("\n=== KẾT QUẢ DỰ THẢO (chưa thay thế kết quả chính thức) ===")
+        print(draft[cols].to_string(index=False))
+        print("\nBảng dự thảo dùng để rà soát; chỉ bằng chứng đã xác minh và đổi thành Approved mới được tính vào bảng chính thức.")

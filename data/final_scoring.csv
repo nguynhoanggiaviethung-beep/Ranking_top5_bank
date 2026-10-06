@@ -1,6 +1,6 @@
-﻿Bank,Customer,Strategy,Technology,Operations,Culture,Data,DTI,Criteria_Available,Coverage,Eligible
-ACB,70,70,70,79.33333333333333,70,70,71.55555555555556,13,0.6842105263157895,True
-VPBank,70,70,65,70,70,63.333333333333336,68.05555555555556,15,0.7894736842105263,True
-OCB,60,70,63.333333333333336,60,70,63.333333333333336,64.44444444444444,13,0.6842105263157895,True
-Agribank,70,70,65,70,70,70,69.16666666666667,15,0.7894736842105263,True
-Vietcombank,85.13333333333334,70,63.333333333333336,77.13333333333334,70,70,72.60000000000001,17,0.8947368421052632,True
+﻿Bank,C3,C1,C2,S1,S2,S3,T1,T2,T3,T4,O1,O2,O3,H1,H2,H3,D1,D2,D3,Customer_Score,Customer_Level,Customer_Coverage,Strategy_Score,Strategy_Level,Strategy_Coverage,Technology_Score,Technology_Level,Technology_Coverage,Operations_Score,Operations_Level,Operations_Coverage,Culture_Score,Culture_Level,Culture_Coverage,Data_Score,Data_Level,Data_Coverage,DTI_Total_Score,DTI_Level,Pillars_Available,Criteria_Available,Criteria_Total,Rank_Eligible,Rank,Rank_Status
+Agribank,,70.0,,70.0,,70.0,70.0,,70.0,70.0,97.0,70.0,,70.0,,70.0,70.0,,70.0,70.0,Mức 3 – Hình thành,1,70.0,Mức 3 – Hình thành,2,70.0,Mức 3 – Hình thành,3,83.5,Mức 4 – Nâng cao,2,70.0,Mức 3 – Hình thành,2,70.0,Mức 3 – Hình thành,63.1578947368421,72.25,Mức 3 – Hình thành,6,12,19,True,1,Đã xếp hạng
+Vietcombank,,70.0,,,,70.0,70.0,70.0,70.0,,91.4,70.0,,70.0,70.0,70.0,50.0,70.0,,70.0,Mức 3 – Hình thành,1,70.0,Mức 3 – Hình thành,1,70.0,Mức 3 – Hình thành,3,80.7,Mức 4 – Nâng cao,2,70.0,Mức 3 – Hình thành,3,60.0,Mức 3 – Hình thành,63.1578947368421,70.11666666666666,Mức 3 – Hình thành,6,12,19,True,2,Đã xếp hạng
+OCB,,70.0,,70.0,,70.0,70.0,50.0,,70.0,98.0,50.0,70.0,70.0,,,70.0,,50.0,70.0,Mức 3 – Hình thành,1,70.0,Mức 3 – Hình thành,2,63.333333333333336,Mức 3 – Hình thành,3,72.66666666666667,Mức 3 – Hình thành,3,70.0,Mức 3 – Hình thành,1,60.0,Mức 3 – Hình thành,63.1578947368421,67.66666666666667,Mức 3 – Hình thành,6,12,19,True,3,Đã xếp hạng
+VPBank,,,,,,,,,,,,,,,,,,,,,N/D,0,,N/D,0,,N/D,0,,N/D,0,,N/D,0,,N/D,0.0,,N/D,0,0,19,False,,Không đủ dữ liệu để xếp hạng
+ACB,,,,,,,,,,,,,,,,,,,,,N/D,0,,N/D,0,,N/D,0,,N/D,0,,N/D,0,,N/D,0.0,,N/D,0,0,19,False,,Không đủ dữ liệu để xếp hạng
