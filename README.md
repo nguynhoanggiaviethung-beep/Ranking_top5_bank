@@ -1,47 +1,97 @@
-# DTI ngân hàng – snapshot đánh giá 2025
+# Hướng dẫn cài đặt và chạy Dashboard xếp hạng ngân hàng
 
-Dự án đánh giá 5 ngân hàng bằng bộ chỉ số thích nghi gồm 6 trụ cột và 19 tiêu chí, tham chiếu khung Quyết định 2158/QĐ-BTTTT. Kết quả không phải điểm DBI chính thức của Bộ TT&TT.
+Tài liệu này dành cho người mới dùng Windows. Làm lần lượt theo các bước dưới đây; thường chỉ cần cài môi trường một lần.
 
-## Quy tắc đã chốt
+## 1. Chuẩn bị
 
-- Ngân hàng: Vietcombank, VPBank, ACB, OCB và Agribank, theo mẫu yêu cầu của đề tài.
-- Kỳ đánh giá: 2025. Bằng chứng ngoài kỳ không được tính vào điểm snapshot 2025.
-- Sáu trụ cột/19 tiêu chí: Customer (C1–C3), Strategy (S1–S3), Technology (T1–T4), Operations (O1–O3), Culture (H1–H3), Data (D1–D3).
-- Định tính: 0/30/50/70/100. C2 và O1: điểm bằng tỷ lệ phần trăm khi có phạm vi/tử số/mẫu số được xác nhận. C3 đánh giá mức độ hỗ trợ khách hàng trên kênh số dựa trên bằng chứng kỳ 2025.
-- Chỉ bằng chứng có `Evidence_Status=Approved`, nội dung/nguồn/ngày thu thập và URL hoặc số trang mới được dùng chấm. Bằng chứng tự trích mặc định là `Candidate`.
-- Không tìm thấy dữ liệu = N/D; không dùng số lượt tải, tin tức, số từ khóa, dữ liệu giả định hoặc median-imputation.
-- Điểm trụ cột là trung bình các tiêu chí có dữ liệu. DTI chỉ được tính khi đủ cả 6 điểm trụ cột, theo trọng số đều 1/6. Một ngân hàng chỉ đủ điều kiện xếp hạng khi có ít nhất 12/19 tiêu chí và dữ liệu ở cả 6 trụ cột; chỉ công bố thứ hạng khi có ít nhất 2 ngân hàng đủ điều kiện để so sánh.
-- Dashboard có hai chế độ: **Xếp hạng tham khảo — đủ 5 ngân hàng** dùng điểm đề xuất và bằng chứng ứng viên có thể truy xuất; **Kết quả chính thức** chỉ dùng bằng chứng đã duyệt. Chế độ tham khảo không thay thế kết luận chính thức.
+- Máy tính Windows 10/11.
+- Thư mục dự án đầy đủ, ví dụ: `D:\Ngân hàng số\Ranking_top5_bank`.
+- Python **3.12** và kết nối Internet khi cài thư viện.
 
-## Chạy dự án
+### Kiểm tra Python
+
+Mở **PowerShell** hoặc Terminal trong VS Code, chạy:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirement.txt
-.\.venv\Scripts\python.exe main.py
-.\.venv\Scripts\python.exe -m streamlit run app.py --server.port 8501
+py -3.12 --version
 ```
 
-Trên Windows, có thể chạy `.\run_app.ps1`. Lệnh này luôn dùng Python 3.12 trong `.venv`, tránh vô tình chạy môi trường cũ đã kích hoạt.
+Nếu hiện `Python 3.12.x`, chuyển sang bước 2. Nếu báo không tìm thấy Python, hãy cài Python 3.12 từ [python.org](https://www.python.org/downloads/) và chọn **Add Python to PATH** trong trình cài đặt. Đóng rồi mở lại PowerShell, sau đó kiểm tra lại.
 
-Pipeline tạo/cập nhật `data/evidence_data.csv`, `data/app_data.csv`, `data/scoring_data.csv`, `data/scoring_provisional_data.csv` và ma trận rà soát `data/evidence_review_matrix.csv`. Bảng chính thức chỉ dùng bằng chứng `Approved`; bảng dự thảo dùng các điểm đề xuất và bằng chứng ứng viên có thể truy xuất. Google Play được giữ làm dữ liệu tham khảo hiện tại, không tự đưa ngược vào kỳ 2025.
+## 2. Cài thư viện cho dự án (làm lần đầu)
 
-## Quy trình duyệt và chấm
+Trong PowerShell, nhập lần lượt:
 
-1. Mở `data/evidence_data.csv`; kiểm tra trích dẫn, trang, URL và kỳ dữ liệu. Trích xuất tự động chỉ tạo bằng chứng ứng viên.
-2. Chuyển `Evidence_Status` thành `Approved` sau khi nhóm đối chiếu nguồn. Với C2/O1, chỉ chấm tỷ lệ được công bố trực tiếp với phạm vi/mẫu số rõ. C3 dùng rubric định tính mới về hỗ trợ khách hàng số, dựa trên báo cáo cùng kỳ.
-3. Điền điểm đã duyệt cho các tiêu chí vào `data/scoring_manual.csv`. Định tính chỉ nhận 0/30/50/70/100; C2/O1 nhận tỷ lệ 0–100.
-4. Chạy lại `.\.venv\Scripts\python.exe main.py`. Pipeline làm mới cả hai bảng và in nhãn riêng để tránh nhầm kết quả dự thảo với chính thức. Chỉ `data/scoring_data.csv` là nguồn kết quả chính thức của dashboard.
+```powershell
+cd "D:\Ngân hàng số\Ranking_top5_bank"
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirement.txt
+```
 
-Các nguồn, trang, trạng thái rà soát và ghi chú chấm được lưu trong `data/evidence_data.csv`. Những đoạn trích tự động chỉ là ứng viên; ngân hàng/tiêu chí chưa có bằng chứng được duyệt sẽ hiển thị N/D cho đến khi nhóm xác minh nguồn và cập nhật trạng thái.
+Chờ đến khi lệnh cài đặt kết thúc và PowerShell hiện lại dấu nhắc nhập lệnh. Nếu thư mục `.venv` đã tồn tại, bỏ qua lệnh tạo môi trường và chạy hai lệnh cài thư viện.
 
-Khi chưa có điểm chính thức đã duyệt, dashboard hiển thị thêm bảng **Dự thảo** từ các điểm đề xuất và bằng chứng ứng viên kỳ 2025 có nội dung, nguồn và trang/URL tra cứu. Bảng này không đổi trạng thái bằng chứng và không thay thế `scoring_data.csv`; các tiêu chí định lượng thiếu tỷ lệ có tử số/mẫu số vẫn là N/D. Thứ hạng dự thảo chỉ dùng rà soát nội bộ.
+## 3. Khởi động Dashboard
 
-`data/final_scoring.csv`, `data/final_evidence_matrix.csv` và `dti_banking_ranking_results.csv` được đồng bộ với kết quả gần nhất; dashboard đọc `data/scoring_data.csv`.
+Mỗi lần muốn sử dụng Dashboard, mở PowerShell rồi chạy:
 
-## Thành phần
+```powershell
+cd "D:\Ngân hàng số\Ranking_top5_bank"
+.\run_app.ps1
+```
 
-- `main.py`: trích đoạn ứng viên từ BCTN, thu thập snapshot Google Play, xác thực điểm và tạo bảng điểm.
-- `scoring_rules.py`: định nghĩa tiêu chí, tính trụ cột/DTI, mức trưởng thành và điều kiện xếp hạng.
-- `app.py`: dashboard tổng hợp.
-- `submetrics_section.py`: biểu đồ tiêu chí và tra cứu bằng chứng.
-- `METHODOLOGY.md`: phương pháp và cách diễn giải kết quả.
+Giữ cửa sổ PowerShell đang chạy. Mở Chrome, Edge hoặc trình duyệt khác và truy cập:
+
+**http://localhost:8501**
+
+Nếu trang chưa hiện ngay, đợi vài giây rồi tải lại trang. Để tắt Dashboard, quay lại PowerShell và nhấn **Ctrl + C**.
+
+## 4. Dùng Dashboard
+
+- Chọn **“Xếp hạng tham khảo — đủ 5 ngân hàng”** để xem bảng so sánh đủ năm ngân hàng. Bảng này dùng điểm đề xuất và có bằng chứng ứng viên; kết quả chỉ để tham khảo.
+- Chọn **“Kết quả chính thức — chỉ bằng chứng đã duyệt”** để xem điểm chỉ tính bằng chứng đã được duyệt. Ngân hàng chưa đủ điều kiện có thể hiện `N/D` hoặc chưa có hạng.
+- `N/D` nghĩa là dữ liệu trong dự án chưa đủ căn cứ để chấm, không có nghĩa ngân hàng không thực hiện hoạt động đó.
+
+## 5. Lỗi thường gặp
+
+### Báo cổng 8501 đang được sử dụng
+
+Dashboard có thể đã chạy. Hãy mở **http://localhost:8501** trước. Nếu có cửa sổ PowerShell khác đang chạy Dashboard, dùng cửa sổ đó; không cần khởi động thêm bản mới.
+
+Nếu muốn chạy trên cổng khác, mở một PowerShell mới tại thư mục dự án và chạy:
+
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run app.py --server.port 8502
+```
+
+Sau đó mở **http://localhost:8502**. Dừng phiên này bằng **Ctrl + C** trong cửa sổ vừa chạy lệnh.
+
+### PowerShell chặn chạy `run_app.ps1`
+
+Chạy lệnh dưới đây trong PowerShell. Thiết lập này chỉ áp dụng cho cửa sổ hiện tại:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+Nếu được hỏi, nhập `Y`, nhấn Enter, rồi chạy lại:
+
+```powershell
+.\run_app.ps1
+```
+
+### Không tìm thấy `.venv` hoặc báo cần Python 3.12
+
+Đảm bảo đang ở đúng thư mục dự án. Kiểm tra phiên bản Python bằng `py -3.12 --version`; nếu chưa tạo `.venv`, làm lại bước 2.
+
+### Cài thư viện bị lỗi hoặc Dashboard báo thiếu thư viện
+
+Kiểm tra Internet, sau đó chạy lại lệnh cài thư viện ở bước 2. Đảm bảo dùng đúng tệp `requirement.txt` (tên tệp ở dạng số ít).
+
+## 6. Nếu mở dự án trên máy tính khác
+
+Sao chép **toàn bộ thư mục dự án**, không chỉ riêng `app.py`. Trên máy mới, cài Python 3.12, làm bước 2 một lần rồi khởi động theo bước 3. Không cần sao chép thư mục `.venv`; môi trường nên được tạo lại trên máy mới.
+
+## Thông tin dự án
+
+Dashboard đánh giá Vietcombank, VPBank, ACB, OCB và Agribank trong kỳ 2025 bằng bộ chỉ số thích nghi gồm sáu trụ cột và 19 tiêu chí. Đây là kết quả nghiên cứu của dự án, không phải điểm DBI chính thức của cơ quan quản lý. Xem [phương pháp đánh giá](METHODOLOGY.md) và [báo cáo tổng kết](FINAL_REPORT.md) để biết cách tính điểm và diễn giải kết quả.
