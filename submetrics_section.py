@@ -55,7 +55,7 @@ def _leaders(df, avail):
     return parts
 
 
-def render_submetrics(df, section, note, insight, style_fig, bank_colors, hex_to_rgba, evidence_file=None):
+def render_submetrics(df, section, note, insight, style_fig, bank_colors, hex_to_rgba):
     section("Phân tích chi tiết từng tiêu chí thành phần",
             f"6 trụ cột được tách thành {len(CRITERIA)} tiêu chí (điểm 0–100 theo rubric). "
             "Ô N/D nghĩa là chưa có bằng chứng đủ mạnh để chấm – không đồng nghĩa với 0 điểm.")
@@ -191,26 +191,3 @@ def render_submetrics(df, section, note, insight, style_fig, bank_colors, hex_to
                     ).astype("string")
                 st.dataframe(tbl, use_container_width=True, hide_index=True)
 
-    if evidence_file:
-        st.markdown("### Bằng chứng và nguồn")
-        try:
-            evidence = pd.read_csv(evidence_file, encoding="utf-8-sig")
-        except FileNotFoundError:
-            evidence = pd.DataFrame()
-        if evidence.empty:
-            st.info("Chưa có bằng chứng. Hãy chạy pipeline để trích đoạn ứng viên từ BCTN.")
-        else:
-            bank_options = ["Tất cả"] + sorted(evidence.get("Bank", pd.Series(dtype=str)).dropna().unique().tolist())
-            selected_bank = st.selectbox("Ngân hàng", bank_options, key="evidence_bank")
-            present_criteria = evidence.get("Criterion", pd.Series(dtype=str)).astype(str).unique().tolist()
-            criterion_options = ["Tất cả"] + [c for c in list(CRITERIA) if c in present_criteria]
-            selected_criterion = st.selectbox("Tiêu chí", criterion_options, key="evidence_criterion")
-            view = evidence.copy()
-            if selected_bank != "Tất cả":
-                view = view[view["Bank"] == selected_bank]
-            if selected_criterion != "Tất cả":
-                view = view[view["Criterion"] == selected_criterion]
-            preferred = ["Bank", "Pillar", "Criterion", "Assessment_Year", "Evidence_Status", "Raw_Value", "Unit", "Score", "Evidence", "Source", "Page", "URL", "Collected_Date", "Reviewer_Note"]
-            columns = [c for c in preferred if c in view.columns]
-            st.dataframe(view[columns], use_container_width=True, hide_index=True)
-            st.caption("Bằng chứng trích tự động có trạng thái Candidate và không được dùng tính điểm cho đến khi được người dùng duyệt.")

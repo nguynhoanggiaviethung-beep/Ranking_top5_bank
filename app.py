@@ -210,8 +210,6 @@ st.markdown("""
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 CSV_FILE = os.path.join(DATA_DIR, "scoring_data.csv")
-EVIDENCE_FILE = os.path.join(DATA_DIR, "evidence_data.csv")
-PROVISIONAL_FILE = os.path.join(DATA_DIR, "scoring_provisional_data.csv")
 
 if not os.path.exists(CSV_FILE):
     st.error("Chưa có data/scoring_data.csv. Hãy chạy main.py để tạo bảng điểm từ các bằng chứng đã duyệt.")
@@ -277,7 +275,6 @@ for mc, (_, r) in zip(metric_cols, top_df.iterrows()):
         f"{r['DTI']:.2f} điểm" if pd.notna(r['DTI']) else "N/D",
         delta_color="off"
     )
-
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
@@ -458,7 +455,7 @@ with col_d:
         )
 
 # ==========================================
-# 9. BỘ TIÊU CHÍ & BẰNG CHỨNG
+# 9. BỘ TIÊU CHÍ & PHÂN TÍCH
 # ==========================================
 from submetrics_section import render_submetrics
 render_submetrics(
@@ -469,7 +466,6 @@ render_submetrics(
     style_fig,
     BANK_COLORS,
     hex_to_rgba,
-    evidence_file=EVIDENCE_FILE,
 )
 
 st.markdown("---")
